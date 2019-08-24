@@ -49,6 +49,7 @@ data SExpr = Nil
            | Prim Type
            | Symb String
            | Pair SExpr SExpr
+           | Func ((Env, SExpr) -> Effect (Env, SExpr))
 
 instance Show SExpr where
   show Nil = "()"
@@ -61,6 +62,7 @@ instance Show SExpr where
     where isList Nil = True
           isList (Pair x y) = isList y
           isList _ = False
+  show (Func _) = "<function>"
 
 instance Eq SExpr where
   Nil == Nil = True
@@ -134,6 +136,11 @@ instance Monad Effect where
 -- environment data type, where variables are stored
 type Env = Map.Map String SExpr
 
+-- bind symbols to values
+bind :: SExpr -> SExpr -> Env -> Env
+bind Nil Nil env = env
+bind (Pair (Symb x) xs) (Pair val vals) env = Map.insert x val (bind xs vals env)
+
 -- evaluation wrapper data type
 type Ev = Eval Effect Env
 
@@ -165,7 +172,8 @@ eval (env, Pair (Symb "cond") (Pair (Pair cond (Pair action Nil)) x)) = do
 eval (env, Pair (Symb "quote") (Pair x Nil)) = do
   return (env, x)
 -- evaluation of lambda form
-
+eval (env, Pair (Symb "lambda") (Pair x (Pair y Nil))) = do
+  return (env, Func (\(e, a) -> eval (bind x a env, y)))
 -- evaluation of label form
 
 -- evaluation of define form
@@ -255,5 +263,57 @@ eval (env, Pair (Symb "%") (Pair x (Pair y Nil))) = do
       case (x', y') of
         (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a `mod` b)))
         _ -> runtimeError $ "Type mismatch"
+-- evaluation of <
+eval (env, Pair (Symb "<") (Pair x (Pair y Nil))) = do
+  (_, x') <- eval (env, x)
+  case x' of
+    Prim (Integer a) -> do
+      (_, y') <- eval (env, y)
+      case y' of
+        Prim (Integer b) -> case a < b of
+          True -> return (env, Prim (Boolean True))
+          False -> return (env, Prim (Boolean False))
+        _ -> runtimeError "Type mismatch"
+    Prim (Decimal a) -> do
+      (_, y') <- eval (env, y)
+      case y' of
+        Prim (Decimal b) -> case a < b of
+          True -> return (env, Prim (Boolean True))
+          False -> return (env, Prim (Boolean False))
+        _ -> runtimeError "Type mismatch"
+-- evaluation of >
+eval (env, Pair (Symb ">") (Pair x (Pair y Nil))) = do
+  (_, x') <- eval (env, x)
+  case x' of
+    Prim (Integer a) -> do
+      (_, y') <- eval (env, y)
+      case y' of
+        Prim (Integer b) -> case a > b of
+          True -> return (env, Prim (Boolean True))
+          False -> return (env, Prim (Boolean False))
+        _ -> runtimeError "Type mismatch"
+    Prim (Decimal a) -> do
+      (_, y') <- eval (env, y)
+      case y' of
+        Prim (Decimal b) -> case a > b of
+          True -> return (env, Prim (Boolean True))
+          False -> return (env, Prim (Boolean False))
+        _ -> runtimeError "Type mismatch"
 -- evaluation of unknown cases
+eval (env, (Pair f x)) = do
+  (_, f') <- eval (env, f)
+  case f' of
+    Func g -> do
+      (_, x') <- evlis (env, x)
+      (_, g') <- g (env, x')
+      return (env, g')
+    _ -> runtimeError $ "Unknown expression " ++ show f'
+
 eval (_, x) = runtimeError $ "Unknown function " ++ show x
+
+evlis :: (Env, SExpr) -> Effect (Env, SExpr)
+evlis (env, Nil) = return (env, Nil)
+evlis (env, Pair x xs) = do
+  (_, x') <- eval (env, x)
+  (_, xs') <- evlis (env, xs)
+  return (env, Pair x' xs')
