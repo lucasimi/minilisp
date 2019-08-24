@@ -1,60 +1,8 @@
-# minilisp
+# Minilisp
 
-minilisp is an interpreter for Scheme/Lisp written in Haskell. I started this project for fun, to show how easy it could be to write interpreters and compilers using Haskell. It turns out that the code runs quite fast, even without any proper optimization. In only 400 lines of code minilisp is able to
+This project provides a very simple Lisp implementation written in the Haskell language. The original idea behind this project was to implement as an embeddable lisp repl environment, and quite unintentionnally as an attempt to show how easy it is to design a fully functional minimal Lisp interpreter by using functional programming. 
 
-1. Perform integer and floating point operations:
-```
-[0]> (+ 1 4 5)
-=> 10
-[0]> (+ 4.5 6.1 7.345)
-=> 17.945
-```
+# Features
 
-2. Perform string manipulations (todo)
+Minilisp is based on the well-known paper by John McCarty (http://www-formal.stanford.edu/jmc/recursive.pdf) with minimal modifications. One of the most remarkable features of minilisp is dynamic scope (as in Emacs Lisp). This may sound cumbersome for a general purpose programming language, but it's really handy when you want a repl which operates on a common environment (http://www.gnu.org/software/emacs/emacs-paper.html#SEC17), which is what minilisp wants to be.
 
-3. Perform symbolic computations
-
-4. Define anonymous functions using lambda notation
-```
-[0]> ((lambda (n) (* 2 n)) 4)
-=> 8
-```
-
-5. Set global variables and define functions
-```
-[0]> (define foo (cons #t #f))
-=> foo
-[0]> foo
-=> (#t . #f)
-
-[0]> (define foo (lambda (n) (* 2 n)))
-=> procedure
-[0]> (foo 4)
-=> 8
-```
-
-6. Conditionals
-```
-[0]> (> 10 5)
-=> #t
-[0]> (eq? #t #f)
-=> #f
-```
-
-7. Recursive function definitions
-```
-[0]> (define fact (lambda (n) (if (eq? n 0) 1 (* n (fact (- n 1))))))
-=> procedure
-```
-
-# Fundamental functions
-
-1. car, cdr
-
-2. cons
-
-3. atom, pair
-
-# One function to eval them all
-
-The core of the interpreter is a read-eval-print loop. Eval is the universal function which evaluates any syntactically valid expression.
