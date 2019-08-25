@@ -100,7 +100,7 @@ instance Functor Effect where
     x' <- x
     case x' of
       Left err -> do
-        putStrLn $ "[ERROR] " ++ show err
+        --putStrLn $ "[ERROR] " ++ show err
         return $ Left err
       Right a -> return $ Right $ f a
 
@@ -111,13 +111,13 @@ instance Applicative Effect where
     x' <- x
     case x' of
       Left errx -> do
-        putStrLn $ "[ERROR] " ++ show errx
+        --putStrLn $ "[ERROR] " ++ show errx
         return $ Left errx
       Right a -> do
         f' <- f
         case f' of
           Left errf -> do
-            putStrLn $ "[ERROR] " ++ show errf
+            --putStrLn $ "[ERROR] " ++ show errf
             return $ Left errf
           Right g -> return $ Right $ g a
 
@@ -126,7 +126,7 @@ instance Monad Effect where
     x' <- x
     case x' of
       Left err -> do
-        putStrLn $ "[ERROR] " ++ show err
+        --putStrLn $ "[ERROR] " ++ show err
         return $ Left err
       Right a -> do
         let Effect y = f a
@@ -173,7 +173,7 @@ eval (env, Pair (Symb "quote") (Pair x Nil)) = do
   return (env, x)
 -- evaluation of lambda form
 eval (env, Pair (Symb "lambda") (Pair x (Pair y Nil))) = do
-  return (env, Func (\(e, a) -> eval (bind x a env, y)))
+  return (env, Func (\(e, a) -> eval (bind x a e, y)))
 -- evaluation of label form
 
 -- evaluation of define form
@@ -226,6 +226,20 @@ eval (env, Pair (Symb "+") (Pair x y)) = do
   case (x', y') of
     (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a + b)))
     (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a + b)))
+    _ -> runtimeError "Numeric type mismatch"
+-- evaluation of -
+eval (env, Pair (Symb "-") (Pair x Nil)) = do
+  (_, x') <- eval (env, x)
+  case x' of
+    Prim (Integer a) -> return (env, Prim $ Integer (-a))
+    Prim (Decimal a) -> return (env, Prim $ Decimal (-a))
+    _ -> runtimeError $ "Non numerical value " ++ show x'
+eval (env, Pair (Symb "-") (Pair x (Pair y Nil))) = do
+  (_, y') <- eval (env, y)
+  (_, x') <- eval (env, x)
+  case (x', y') of
+    (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a - b)))
+    (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a - b)))
     _ -> runtimeError "Numeric type mismatch"
 -- evaluation of *
 eval (env, Pair (Symb "*") (Pair x Nil)) = do

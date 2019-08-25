@@ -36,10 +36,10 @@ repl env = do
         x' <- liftIO x
         case x' of
           Left e -> do
-            liftIO $ putStrLn ("[ERROR] " ++ show e)
+            liftIO $ putStrLn $ "[ERROR] " ++ show e
             repl env
           Right (env', expr) -> do
-            liftIO $ putStrLn ("=> " ++ show expr)
+            liftIO $ putStrLn $ "=> " ++ show expr
             repl env'
       _ -> repl env
 
