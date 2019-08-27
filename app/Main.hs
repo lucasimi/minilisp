@@ -69,7 +69,7 @@ main = do
   args <- getArgs
   case args of
     [] -> do
-      putStrLn "Conseive REPL Environment [CTRL+c to quit]"
+      putStrLn "Minilisp interactive REPL environment [CTRL+c to quit]"
       runInputT defaultSettings (repl Map.empty)
     [path] -> do
       s <- readFile path
