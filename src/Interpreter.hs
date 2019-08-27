@@ -5,6 +5,14 @@ import qualified Data.Map as Map
 import Utils
 import Parser
 
+toList :: SExpr -> [SExpr]
+toList Nil = []
+toList (Pair x y) = x:(toList y)
+
+toCoupleList :: SExpr -> [(SExpr, SExpr)]
+toCoupleList Nil = []
+toCoupleList (Pair (Pair x (Pair y Nil)) z) = (x, y):(toCoupleList z)
+
 -- bind symbols to values
 bind :: SExpr -> SExpr -> Env -> Env
 bind Nil Nil env = env
@@ -169,7 +177,7 @@ evalMod env x y = do
     _ -> do
       (_, x') <- eval env x
       case (x', y') of
-        (Integer a,Integer b) -> return (env, Integer (a `mod` b))
+        (Integer a, Integer b) -> return (env, Integer (a `mod` b))
         _ -> runtimeError $ "Type mismatch"
 
 -- evaluation of "<"
@@ -206,9 +214,28 @@ eval :: Env -> SExpr -> Effect (Env, SExpr)
 eval env Nil = return (env, Nil)
 eval env T = return (env, T)
 eval env F = return (env, F)
+
 eval env (Integer x) = return (env, Integer x)
 eval env (Double x) = return (env, Double x)
 eval env (String x) = return (env, String x)
+
+eval env Car = return (env, Spec $ \e (Pair a Nil) -> evalCar e a)
+eval env Cdr = return (env, Spec $ \e (Pair a Nil) -> evalCdr e a)
+eval env Cons = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalCons e a b)
+eval env Eqq = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalEq e a b)
+eval env Atom = return (env, Spec $ \e (Pair a Nil) -> evalAtom e a)
+eval env Cond = return (env, Spec $ \e x -> evalCond e (toCoupleList x))
+eval env If = return (env, Spec $ \e (Pair a (Pair b (Pair c Nil))) -> evalIf e a b c)
+eval env Quote = return (env, Spec $ \e (Pair a Nil) -> evalQuote e a)
+eval env Define = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalDefine e a b)
+eval env Lambda = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalLambda e a b)
+eval env Plus = return (env, Spec $ \e x -> evalPlus e (toList x))
+eval env Mult = return (env, Spec $ \e x -> evalMult e (toList x))
+eval env Minus = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalMinus e a b)
+eval env Div = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalDiv e a b)
+eval env Mod = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalMod e a b)
+eval env Less = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalLess e a b)
+eval env Greater = return (env, Spec $ \e (Pair a (Pair b Nil)) -> evalGreater e a b)
 -- evaluation of symbols (lookup)
 eval env (Symb x) = case Map.lookup x env of
   Just x' -> return (env, x')
@@ -232,7 +259,6 @@ eval env (DIV x y) = evalDiv env x y
 eval env (MOD x y) = evalMod env x y
 eval env (LESS x y) = evalLess env x y
 eval env (GREATER x y) = evalGreater env x y
-
 -- evaluation of non built-in functions
 eval env (Pair f x) = do
   (_, f') <- eval env f
@@ -241,9 +267,10 @@ eval env (Pair f x) = do
       (_, x') <- evalList env x
       (_, g') <- g env x'
       return (env, g')
-    _ -> runtimeError $ "Unknown expression"
+    Spec g -> g env x
+    _ -> runtimeError $ "Unknown expression " ++ show f'
 -- evaluation of other cases
-eval _ _ = runtimeError $ "Unknown expression"
+eval _ _ = runtimeError $ "Unknown expression(???)"
 
 -- evaluate all elements in a list
 evalList :: Env -> SExpr -> Effect (Env, SExpr)
