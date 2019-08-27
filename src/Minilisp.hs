@@ -49,7 +49,53 @@ data SExpr = Nil
            | Prim Type
            | Symb String
            | Pair SExpr SExpr
-           | Func ((Env, SExpr) -> Effect (Env, SExpr))
+           | Func (Env -> SExpr -> Effect (Env, SExpr))
+           | CAR SExpr
+           | CDR SExpr
+           | CONS SExpr SExpr
+           | ATOM SExpr
+           | EQ SExpr SExpr
+           | QUOTE SExpr
+           | COND [(SExpr, SExpr)]
+           | IF SExpr SExpr SExpr
+           | LAMBDA SExpr SExpr
+           | DEFINE SExpr SExpr
+           | PLUS [SExpr]
+           | MINUS SExpr SExpr
+           | MULT [SExpr]
+           | DIV SExpr SExpr
+           | MOD SExpr SExpr
+           | LESS SExpr SExpr
+           | GREATER SExpr SExpr
+
+convert :: SExpr -> SExpr
+convert (Pair (Symb "car") (Pair x Nil)) = CAR (convert x)
+convert (Pair (Symb "cdr") (Pair x Nil)) = CDR (convert x)
+convert (Pair (Symb "cons") (Pair x (Pair y Nil))) = CONS (convert x) (convert y)
+convert (Pair (Symb "atom") (Pair x Nil)) = ATOM (convert x)
+convert (Pair (Symb "eq") (Pair x (Pair y Nil))) = Minilisp.EQ (convert x) (convert y)
+convert (Pair (Symb "quote") (Pair x Nil)) = QUOTE (convert x)
+convert (Pair (Symb "cond") x) = COND (convertCoupleList x)
+convert (Pair (Symb "if") (Pair x (Pair y (Pair z Nil)))) = IF (convert x) (convert y) (convert z)
+convert (Pair (Symb "lambda") (Pair x (Pair y Nil))) = LAMBDA (convert x) (convert y)
+convert (Pair (Symb "define") (Pair x (Pair y Nil))) = DEFINE (convert x) (convert y)
+convert (Pair (Symb "+") x) = PLUS (convertList x)
+convert (Pair (Symb "*") x) = MULT (convertList x)
+convert (Pair (Symb "-") (Pair x (Pair y Nil))) = MINUS (convert x) (convert y)
+convert (Pair (Symb "/") (Pair x (Pair y Nil))) = DIV (convert x) (convert y)
+convert (Pair (Symb "%") (Pair x (Pair y Nil))) = MOD (convert x) (convert y)
+convert (Pair (Symb "<") (Pair x (Pair y Nil))) = LESS (convert x) (convert y)
+convert (Pair (Symb ">") (Pair x (Pair y Nil))) = GREATER (convert x) (convert y)
+convert (Pair x y) = Pair (convert x) (convert y)
+convert x = x
+
+convertList :: SExpr -> [SExpr]
+convertList Nil = []
+convertList (Pair x y) = (convert x):(convertList y)
+
+convertCoupleList :: SExpr -> [(SExpr, SExpr)]
+convertCoupleList Nil = []
+convertCoupleList (Pair (Pair x (Pair y Nil)) z) = (convert x, convert y):(convertCoupleList z)
 
 instance Show SExpr where
   show Nil = "()"
@@ -64,12 +110,6 @@ instance Show SExpr where
           isList _ = False
   show (Func _) = "<function>"
 
-instance Eq SExpr where
-  Nil == Nil = True
-  Prim x == Prim y = x == y
-  Symb x == Symb y = x == y
-  Pair a b == Pair x y = (a == x) && (b == y)
-  _ == _ = False
 
 instance Read SExpr where
   readsPrec _ str = case dropLeadingBlanks str of
@@ -153,167 +193,169 @@ runtimeError :: String -> Effect (Env, SExpr)
 runtimeError x = Effect $ return $ Left $ RuntimeErr x
 
 -- evaluation of "car"
-evalCar :: (Env, SExpr) -> Effect (Env, SExpr)
-evalCar (env, Pair (Pair x _) Nil) = return (env, x)
+evalCar :: Env -> SExpr -> Effect (Env, SExpr)
+evalCar env x = do
+  (_, x') <- eval env x
+  case x' of
+    Pair a _ -> return (env, a)
 
 -- evaluation of "cdr"
-evalCdr :: (Env, SExpr) -> Effect (Env, SExpr)
-evalCdr (env, Pair (Pair _ y) Nil) = return (env, y)
+evalCdr :: Env -> SExpr -> Effect (Env, SExpr)
+evalCdr env x = do
+  (_, x') <- eval env x
+  case x' of
+    Pair _ b -> return (env, b)
 
 -- evaluation of "cons"
-evalCons :: (Env, SExpr) -> Effect (Env, SExpr)
-evalCons (env, Pair x (Pair y Nil)) = return (env, Pair x y)
+evalCons :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalCons env x y = do
+  (_, x') <- eval env x
+  (_, y') <- eval env y
+  return (env, Pair x' y')
 
 -- evaluation of "eq"
-evalEq :: (Env, SExpr) -> Effect(Env, SExpr)
-evalEq (env, Pair (Prim x) (Pair (Prim y) Nil)) = case x == y of
-  True -> return (env, Prim $ Boolean True)
-  False -> return (env, Prim $ Boolean False)
+evalEq :: Env -> SExpr -> SExpr -> Effect(Env, SExpr)
+evalEq env x y = do
+  (_, x') <- eval env x
+  (_, y') <- eval env y
+  case (x', y') of
+    (Prim a, Prim b) -> case a == b of
+      True -> return (env, Prim $ Boolean True)
+      False -> return (env, Prim $ Boolean False)
+    _ -> return (env, Prim $ Boolean False)
 
 -- evaluation of "atom"
-evalAtom :: (Env, SExpr) -> Effect (Env, SExpr)
-evalAtom (env, Nil) = return (env, Prim $ Boolean True)
-evalAtom (env, Prim _) = return (env, Prim $ Boolean True)
-evalAtom (env, _) = return (env, Prim $ Boolean False)
+evalAtom :: Env -> SExpr -> Effect (Env, SExpr)
+evalAtom env x = do
+  (_, x') <- eval env x
+  case x' of
+    Nil -> return (env, Prim $ Boolean True)
+    Prim _ -> return (env, Prim $ Boolean True)
+    _ -> return (env, Prim $ Boolean False)
 
 -- evaluation of "cond" special form
-evalCond :: (Env, SExpr) -> Effect (Env, SExpr)
-evalCond (env, Pair (Pair cond (Pair action Nil)) x) = do
-  (_, cond') <- eval (env, cond)
-  case cond' of
-    Prim (Boolean True) -> eval (env, action)
-    Prim (Boolean False) -> eval (env, Pair (Symb "cond") x)
+evalCond :: Env -> [(SExpr, SExpr)] -> Effect (Env, SExpr)
+evalCond env ((x, y):xs) = do
+  (_, x') <- eval env x
+  case x' of
+    Prim (Boolean True) -> eval env y
+    Prim (Boolean False) -> evalCond env xs
     _ -> runtimeError "Non boolean value as conditional"
 
-evalIf :: (Env, SExpr) -> Effect (Env, SExpr)
-evalIf (env, Pair cond (Pair action (Pair alt Nil))) = do
-  (_, cond') <- eval (env, cond)
-  case cond' of
-    Prim (Boolean True) -> eval (env, action)
-    Prim (Boolean False) -> eval (env, alt)
+evalIf :: Env -> SExpr -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalIf env x y z = do
+  (_, x') <- eval env x
+  case x' of
+    Prim (Boolean True) -> eval env y
+    Prim (Boolean False) -> eval env z
     _ -> runtimeError "Non boolean value as conditional"
 
 -- evaluation of "quote" special form
-evalQuote :: (Env, SExpr) -> Effect (Env, SExpr)
-evalQuote (env, Pair x Nil) = do
+evalQuote :: Env -> SExpr -> Effect (Env, SExpr)
+evalQuote env x = do
   return (env, x)
 
 -- evaluation of "lambda" special form
-evalLambda :: (Env, SExpr) -> Effect (Env, SExpr)
-evalLambda (env, Pair x (Pair y Nil)) = do
-  return (env, Func (\(e, a) -> eval (bind x a e, y)))
+evalLambda :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalLambda env x y = do
+  return (env, Func (\e a -> eval (bind x a e) y))
 
 -- evaluation of "label" special form
 evalLabel :: (Env, SExpr) -> Effect (Env, SExpr)
 evalLabel (env, Pair (Symb x) (Pair y Nil)) = do
-  (_, y') <- eval (env, y)
+  (_, y') <- eval env y
   case  y' of
     Func f -> return (env, Func g)
-      where g = \(e, a) -> eval (bind (Pair (Symb x) Nil) (Pair (Func g) Nil) e, y)
+      where g = \e a -> eval (bind (Pair (Symb x) Nil) (Pair (Func g) Nil) e) y
 
 -- evaluation of "define" special form
-evalDefine :: (Env, SExpr) -> Effect (Env, SExpr)
-evalDefine (env, Pair (Symb x) (Pair y Nil)) = do
-  (_, y') <- eval (env, y)
+evalDefine :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalDefine env (Symb x) y = do
+  (_, y') <- eval env y
   return (Map.insert x y' env, Symb x)
 
 -- evaluation of "+"
-evalPlus :: (Env, SExpr) -> Effect (Env, SExpr)
-evalPlus (env, Pair x Nil) = do
-  (_, x') <- eval (env, x)
+evalPlus :: Env -> [SExpr] -> Effect (Env, SExpr)
+evalPlus env [x] = do
+  (_, x') <- eval env x
   case x' of
     Prim (Integer a) -> return (env, x')
     Prim (Decimal a) -> return (env, x')
     _ -> runtimeError $ "Non numerical value " ++ show x'
-evalPlus (env, Pair x y) = do
-  (_, y') <- eval (env, Pair (Symb "+") y)
-  (_, x') <- eval (env, x)
-  case (x', y') of
+evalPlus env (x:xs) = do
+  (_, xs') <- evalPlus env xs
+  (_, x') <- eval env x
+  case (x', xs') of
     (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a + b)))
     (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a + b)))
     _ -> runtimeError "Numeric type mismatch"
-evalPlus _ = runtimeError "Arguments mismatch"
 
 -- evaluation of "-"
-evalMinus :: (Env, SExpr) -> Effect (Env, SExpr)
-evalMinus (env, Pair x Nil) = do
-  (_, x') <- eval (env, x)
-  case x' of
-    Prim (Integer a) -> return (env, Prim $ Integer (-a))
-    Prim (Decimal a) -> return (env, Prim $ Decimal (-a))
+evalMinus :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalMinus env x y = do
+  (_, x') <- eval env x
+  (_, y') <- eval env y
+  case (x', y') of
+    (Prim (Integer a), Prim (Integer b)) -> return (env, Prim $ Integer $ a - b)
+    (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim $ Decimal $ a - b)
     _ -> runtimeError "Type mismatch"
-evalMinus (env, Pair x (Pair y Nil)) = do
-  (_, x') <- eval (env, x)
-  case x' of
-    Prim (Integer a) -> do
-      (_, y') <- eval (env, y)
-      case y' of
-        Prim (Integer b) -> return (env, Prim $ Integer $ a - b)
-        _ -> runtimeError "Type mismatch"
-    Prim (Decimal a) -> do
-      (_, y') <- eval (env, y)
-      case y' of
-        Prim (Decimal b) -> return (env, Prim $ Decimal $ a - b)
-        _ -> runtimeError "Type mismatch"
-    _ -> runtimeError "Type mismatch"
-evalMinus _ = runtimeError "Arguments mismatch"
 
 -- evaluation of "*"
-evalMult :: (Env, SExpr) -> Effect (Env, SExpr)
-evalMult (env, Pair x Nil) = do
-  (_, x') <- eval (env, x)
+evalMult :: Env -> [SExpr] -> Effect (Env, SExpr)
+evalMult env [x] = do
+  (_, x') <- eval env x
   case x' of
     Prim (Integer a) -> return (env, x')
     Prim (Decimal a) -> return (env, x')
     _ -> runtimeError $ "Non numerical value " ++ show x'
-evalMult (env, Pair x y) = do
-  (_, y') <- eval (env, Pair (Symb "*") y)
-  (_, x') <- eval (env, x)
-  case (x', y') of
+evalMult env (x:xs) = do
+  (_, xs') <- evalMult env xs
+  (_, x') <- eval env x
+  case (x', xs') of
     (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a * b)))
     (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a * b)))
     _ -> runtimeError "Type mismatch"
 
 -- evaluation of "/"
-evalDiv :: (Env, SExpr) -> Effect (Env, SExpr)
-evalDiv (env, Pair x (Pair y Nil)) = do
-  (_, y') <- eval (env, y)
+evalDiv :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalDiv env x y = do
+  (_, y') <- eval env y
   case y' of
     Prim (Integer 0) -> runtimeError "Division by 0"
     Prim (Decimal 0.0) -> runtimeError "Division by 0.0"
     _ -> do
-      (_, x') <- eval (env, x)
+      (_, x') <- eval env x
       case (x', y') of
         (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a `div` b)))
         (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a / b)))
         _ -> runtimeError $ "Type mismatch"
 
 -- evaluation of "%"
-evalMod :: (Env, SExpr) -> Effect (Env, SExpr)
-evalMod (env, Pair x (Pair y Nil)) = do
-  (_, y') <- eval (env, y)
+evalMod :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalMod env x y = do
+  (_, y') <- eval env y
   case y' of
     Prim (Integer 0) -> runtimeError "Division by 0"
     _ -> do
-      (_, x') <- eval (env, x)
+      (_, x') <- eval env x
       case (x', y') of
         (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a `mod` b)))
         _ -> runtimeError $ "Type mismatch"
 
 -- evaluation of "<"
-evalLess :: (Env, SExpr) -> Effect (Env, SExpr)
-evalLess (env, Pair x (Pair y Nil)) = do
-  (_, x') <- eval (env, x)
+evalLess :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalLess env x y = do
+  (_, x') <- eval env x
   case x' of
     Prim (Integer a) -> do
-      (_, y') <- eval (env, y)
+      (_, y') <- eval env y
       case y' of
         Prim (Integer b) -> case a < b of
           True -> return (env, Prim (Boolean True))
           False -> return (env, Prim (Boolean False))
         _ -> runtimeError "Type mismatch"
     Prim (Decimal a) -> do
-      (_, y') <- eval (env, y)
+      (_, y') <- eval env y
       case y' of
         Prim (Decimal b) -> case a < b of
           True -> return (env, Prim (Boolean True))
@@ -322,19 +364,19 @@ evalLess (env, Pair x (Pair y Nil)) = do
     _ -> runtimeError "Type mismatch"
 
 -- evaluation of ">"
-evalGreater :: (Env, SExpr) -> Effect (Env, SExpr)
-evalGreater (env, Pair x (Pair y Nil)) = do
-  (_, x') <- eval (env, x)
+evalGreater :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalGreater env x y = do
+  (_, x') <- eval env x
   case x' of
     Prim (Integer a) -> do
-      (_, y') <- eval (env, y)
+      (_, y') <- eval env y
       case y' of
         Prim (Integer b) -> case a > b of
           True -> return (env, Prim (Boolean True))
           False -> return (env, Prim (Boolean False))
         _ -> runtimeError "Type mismatch"
     Prim (Decimal a) -> do
-      (_, y') <- eval (env, y)
+      (_, y') <- eval env y
       case y' of
         Prim (Decimal b) -> case a > b of
           True -> return (env, Prim (Boolean True))
@@ -343,56 +385,57 @@ evalGreater (env, Pair x (Pair y Nil)) = do
     _ -> runtimeError "Type mismatch"
 
 -- evaluation function, the core of the lisp interpreter
-eval :: (Env, SExpr) -> Effect (Env, SExpr)
+eval :: Env -> SExpr -> Effect (Env, SExpr)
 -- evaluation of atomic values (self-evaluation)
-eval (env, Nil) = return (env, Nil)
-eval (env, Prim x) = return (env, Prim x)
+eval env Nil = return (env, Nil)
+eval env (Prim x) = return (env, Prim x)
 -- evaluation of symbols (lookup)
-eval (env, Symb x) = case Map.lookup x env of
+eval env (Symb x) = case Map.lookup x env of
   Just x' -> return (env, x')
   Nothing -> runtimeError $ "Unbound symbol " ++ x
 -- evaluation of built-in functions (function application) and special forms (custom evaluation)
-eval (env, Pair (Symb "car") x) = evalFunc evalCar (env, x)
-eval (env, Pair (Symb "cdr") x) = evalFunc evalCdr (env, x)
-eval (env, Pair (Symb "cons") x) = evalFunc evalCons (env, x)
-eval (env, Pair (Symb "eq") x) = evalFunc evalEq (env, x)
-eval (env, Pair (Symb "atom") x) = evalFunc evalAtom (env, x)
-eval (env, Pair (Symb "cond") x) = evalCond (env, x)
-eval (env, Pair (Symb "if") x) = evalIf (env, x)
-eval (env, Pair (Symb "quote") x) = evalQuote (env, x)
-eval (env, Pair (Symb "define") x) = evalDefine (env, x)
-eval (env, Pair (Symb "lambda") x) = evalLambda (env, x)
-eval (env, Pair (Symb "label") x) = evalLabel (env, x)
-eval (env, Pair (Symb "+") x) = evalPlus (env, x)
-eval (env, Pair (Symb "-") x) = evalMinus (env, x)
-eval (env, Pair (Symb "*") x) = evalMult (env, x)
-eval (env, Pair (Symb "/") x) = evalDiv (env, x)
-eval (env, Pair (Symb "%") x) = evalMod (env, x)
-eval (env, Pair (Symb "<") x) = evalLess (env, x)
-eval (env, Pair (Symb ">") x) = evalGreater (env, x)
+eval env (CAR x) = evalCar env x
+eval env (CDR x) = evalCdr env x
+eval env (CONS x y) = evalCons env x y
+eval env (Minilisp.EQ x y) = evalEq env x y
+eval env (ATOM x) = evalAtom env x
+eval env (COND x) = evalCond env x
+eval env (IF x y z) = evalIf env x y z
+eval env (QUOTE x) = evalQuote env x
+eval env (DEFINE x y) = evalDefine env x y
+eval env (LAMBDA x y) = evalLambda env x y
+--eval (env, LABEL x y) = evalLabel (env, x)
+eval env (PLUS x) = evalPlus env x
+eval env (MINUS x y) = evalMinus env x y
+eval env (MULT x) = evalMult env x
+eval env (DIV x y) = evalDiv env x y
+eval env (MOD x y) = evalMod env x y
+eval env (LESS x y) = evalLess env x y
+eval env (GREATER x y) = evalGreater env x y
+
 -- evaluation of non built-in functions
-eval (env, Pair f x) = do
-  (_, f') <- eval (env, f)
+eval env (Pair f x) = do
+  (_, f') <- eval env f
   case f' of
     Func g -> do
-      (_, x') <- evalList (env, x)
-      (_, g') <- g (env, x')
+      (_, x') <- evalList env x
+      (_, g') <- g env x'
       return (env, g')
     _ -> runtimeError $ "Unknown expression"
 -- evaluation of other cases
-eval (_, x) = runtimeError $ "Unknown expression"
+eval _ _ = runtimeError $ "Unknown expression"
 
 -- evaluate all elements in a list
-evalList :: (Env, SExpr) -> Effect (Env, SExpr)
-evalList (env, Nil) = return (env, Nil)
-evalList (env, Pair x xs) = do
-  (_, x') <- eval (env, x)
-  (_, xs') <- evalList (env, xs)
+evalList :: Env -> SExpr -> Effect (Env, SExpr)
+evalList env Nil = return (env, Nil)
+evalList env (Pair x xs) = do
+  (_, x') <- eval env x
+  (_, xs') <- evalList env xs
   return (env, Pair x' xs')
 
 -- evaluate a function on an arguments list
-evalFunc :: ((Env, SExpr) -> Effect (Env, SExpr)) -> (Env, SExpr) -> Effect (Env, SExpr)
-evalFunc func (env, args) = do
-  (_, args') <- evalList (env, args)
-  (_, res) <- func (env, args')
+evalFunc :: (Env -> SExpr -> Effect (Env, SExpr)) -> Env -> SExpr -> Effect (Env, SExpr)
+evalFunc func env args = do
+  (_, args') <- evalList env args
+  (_, res) <- func env args'
   return (env, res)

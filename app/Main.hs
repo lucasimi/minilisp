@@ -31,7 +31,7 @@ repl env = do
   input <- getInput "" 0
   case input of
     str -> case reads str :: [(SExpr, String)] of
-      [(s, "")] -> let Effect x = eval (env, s) in do
+      [(s, "")] -> let Effect x = eval env (convert s) in do
         --liftIO $ putStrLn $ show s
         x' <- liftIO x
         case x' of
@@ -49,7 +49,7 @@ repl' (env, s) = case dropWhile (`elem` " \t\n") s of
   [] -> return ()
   _ -> case reads s :: [(SExpr, String)] of
     [] -> putStrLn $ "syntax error: " ++ show s
-    [(e, s')] -> let Effect x = eval (env, e) in do
+    [(e, s')] -> let Effect x = eval env (convert e) in do
       --liftIO $ putStrLn $ show e
       x' <- liftIO x
       case x' of
