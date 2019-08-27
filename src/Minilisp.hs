@@ -11,42 +11,60 @@ dropLeadingBlanks = dropWhile (`elem` " \t\n")
 splitOnDelimiter :: String -> (String, String)
 splitOnDelimiter = (break (`elem` " \t\n()."))
 
+split :: String -> (String, String)
+split = splitOnDelimiter . dropLeadingBlanks
+
 -- all admitted TypeTypes for Primic type
-data Type = Integer Integer
-          | Decimal Double
-          | Boolean Bool
-          | String String
+data TokenType = IntegerType Integer
+               | DoubleType Double
+               | BoolType Bool
+               | StringType String
+               | SymbType String
+               deriving Show
 
-instance Show Type where
-  show (Integer x) = show x
-  show (Decimal x) = show x
-  show (Boolean True) = "#t"
-  show (Boolean False) = "#f"
-  show (String x) = show x
-
-instance Eq Type where
-  Integer x == Integer y = x == y
-  Decimal x == Decimal y = x == y
-  Boolean x == Boolean y = x == y
-  String x == String y = x == y
-  _ == _ = False
-
-instance Read Type where
+instance Read TokenType where
   readsPrec _ str =
-    case reads str :: [(Integer, String)] of
-      [(x, s)] -> [(Integer x, s)]
-      _ -> case reads str :: [(Double, String)] of
-        [(x, s)] -> [(Decimal x, s)]
-        _ -> case reads str :: [(String, String)] of
-          [(x, s)] -> [(String x, s)]
-          _ -> case splitOnDelimiter (dropLeadingBlanks str) of
-            ("#t", s) -> [(Boolean True, s)]
-            ("#f", s) -> [(Boolean False, s)]
-            _ -> []
+    case reads str :: [(String, String)] of
+      [(x, s)] -> [(StringType x, s)]
+      _ -> case split str of
+        ("", '(':_) -> []
+        ("", ')':_) -> []
+        ("", '.':_) -> []
+        (str', s) -> case reads str' :: [(Integer, String)] of
+          [(x, s')] -> [(IntegerType x, s' ++ s)]
+          _ -> case reads str' :: [(Double, String)] of
+            [(x, s')] -> [(DoubleType x, s' ++ s)]
+            _ -> case split str' of
+              ("#t", s') -> [(BoolType True, s' ++ s)]
+              ("#f", s') -> [(BoolType False, s' ++ s)]
+              (str'', s') -> [(SymbType str'', s' ++ s)]
+
+data TokenTree = Empty | Leaf TokenType | Node TokenTree TokenTree deriving Show
+
+instance Read TokenTree where
+  readsPrec _ str = case reads str :: [(TokenType, String)] of
+    [(x, s)] -> [(Leaf x, s)]
+    _ -> case split str of
+      ("", '(':str') -> case reads str' :: [(TokenTree, String)] of
+        [(x, str'')] -> case split str'' of
+          ("", ')':str''') -> [(Node x Empty, str''')]
+          ("", '.':str''') -> case reads ('(':str''') :: [(TokenTree, String)] of
+              [(Node y Empty, str'''')] -> [(Node x y, str'''')]
+              _ -> []
+          _ -> case reads ('(':str'') :: [(TokenTree, String)] of
+              [(y, s)] -> [(Node x y, s)]
+              _ -> []
+        _ -> case split str' of
+          ("", ')':str'') -> [(Empty, str'')]
+          _ -> []
 
 -- S-Expression data type
 data SExpr = Nil
-           | Prim Type
+           | T
+           | F
+           | Integer Integer
+           | Double Double
+           | String String
            | Symb String
            | Pair SExpr SExpr
            | Func (Env -> SExpr -> Effect (Env, SExpr))
@@ -68,38 +86,48 @@ data SExpr = Nil
            | LESS SExpr SExpr
            | GREATER SExpr SExpr
 
-convert :: SExpr -> SExpr
-convert (Pair (Symb "car") (Pair x Nil)) = CAR (convert x)
-convert (Pair (Symb "cdr") (Pair x Nil)) = CDR (convert x)
-convert (Pair (Symb "cons") (Pair x (Pair y Nil))) = CONS (convert x) (convert y)
-convert (Pair (Symb "atom") (Pair x Nil)) = ATOM (convert x)
-convert (Pair (Symb "eq") (Pair x (Pair y Nil))) = Minilisp.EQ (convert x) (convert y)
-convert (Pair (Symb "quote") (Pair x Nil)) = QUOTE (convert x)
-convert (Pair (Symb "cond") x) = COND (convertCoupleList x)
-convert (Pair (Symb "if") (Pair x (Pair y (Pair z Nil)))) = IF (convert x) (convert y) (convert z)
-convert (Pair (Symb "lambda") (Pair x (Pair y Nil))) = LAMBDA (convert x) (convert y)
-convert (Pair (Symb "define") (Pair x (Pair y Nil))) = DEFINE (convert x) (convert y)
-convert (Pair (Symb "+") x) = PLUS (convertList x)
-convert (Pair (Symb "*") x) = MULT (convertList x)
-convert (Pair (Symb "-") (Pair x (Pair y Nil))) = MINUS (convert x) (convert y)
-convert (Pair (Symb "/") (Pair x (Pair y Nil))) = DIV (convert x) (convert y)
-convert (Pair (Symb "%") (Pair x (Pair y Nil))) = MOD (convert x) (convert y)
-convert (Pair (Symb "<") (Pair x (Pair y Nil))) = LESS (convert x) (convert y)
-convert (Pair (Symb ">") (Pair x (Pair y Nil))) = GREATER (convert x) (convert y)
-convert (Pair x y) = Pair (convert x) (convert y)
-convert x = x
+compile :: TokenTree -> SExpr
+compile Empty = Nil
+compile (Leaf (BoolType True)) = T
+compile (Leaf (BoolType False)) = F
+compile (Leaf (IntegerType x)) = Integer x
+compile (Leaf (DoubleType x)) = Double x
+compile (Leaf (StringType x)) = String x
+compile (Leaf (SymbType x)) = Symb x
+compile (Node (Leaf (SymbType "car")) (Node x Empty)) = CAR (compile x)
+compile (Node (Leaf (SymbType "cdr")) (Node x Empty)) = CDR (compile x)
+compile (Node (Leaf (SymbType "cons")) (Node x (Node y Empty))) = CONS (compile x) (compile y)
+compile (Node (Leaf (SymbType "atom")) (Node x Empty)) = ATOM (compile x)
+compile (Node (Leaf (SymbType "eq")) (Node x (Node y Empty))) = Minilisp.EQ (compile x) (compile y)
+compile (Node (Leaf (SymbType "quote")) (Node x Empty)) = QUOTE (compile x)
+compile (Node (Leaf (SymbType "cond")) x) = COND (compileCoupleList x)
+compile (Node (Leaf (SymbType "if")) (Node x (Node y (Node z Empty)))) = IF (compile x) (compile y) (compile z)
+compile (Node (Leaf (SymbType "lambda")) (Node x (Node y Empty))) = LAMBDA (compile x) (compile y)
+compile (Node (Leaf (SymbType "define")) (Node x (Node y Empty))) = DEFINE (compile x) (compile y)
+compile (Node (Leaf (SymbType "+")) x) = PLUS (compileList x)
+compile (Node (Leaf (SymbType "*")) x) = MULT (compileList x)
+compile (Node (Leaf (SymbType "-")) (Node x (Node y Empty))) = MINUS (compile x) (compile y)
+compile (Node (Leaf (SymbType "/")) (Node x (Node y Empty))) = DIV (compile x) (compile y)
+compile (Node (Leaf (SymbType "%")) (Node x (Node y Empty))) = MOD (compile x) (compile y)
+compile (Node (Leaf (SymbType "<")) (Node x (Node y Empty))) = LESS (compile x) (compile y)
+compile (Node (Leaf (SymbType ">")) (Node x (Node y Empty))) = GREATER (compile x) (compile y)
+compile (Node x y) = Pair (compile x) (compile y)
 
-convertList :: SExpr -> [SExpr]
-convertList Nil = []
-convertList (Pair x y) = (convert x):(convertList y)
+compileList :: TokenTree -> [SExpr]
+compileList Empty = []
+compileList (Node x y) = (compile x):(compileList y)
 
-convertCoupleList :: SExpr -> [(SExpr, SExpr)]
-convertCoupleList Nil = []
-convertCoupleList (Pair (Pair x (Pair y Nil)) z) = (convert x, convert y):(convertCoupleList z)
+compileCoupleList :: TokenTree -> [(SExpr, SExpr)]
+compileCoupleList Empty = []
+compileCoupleList (Node (Node x (Node y Empty)) z) = (compile x, compile y):(compileCoupleList z)
 
 instance Show SExpr where
   show Nil = "()"
-  show (Prim x) = show x
+  show T = "#t"
+  show F = "#f"
+  show (Integer x) = show x
+  show (Double x) = show x
+  show (String x) = show x
   show (Symb x) = x
   show (Pair x Nil) = "(" ++ show x ++ ")"
   show (Pair x y) = if isList (Pair x y)
@@ -109,8 +137,7 @@ instance Show SExpr where
           isList (Pair x y) = isList y
           isList _ = False
   show (Func _) = "<function>"
-
-
+{--
 instance Read SExpr where
   readsPrec _ str = case dropLeadingBlanks str of
     "" -> []
@@ -131,7 +158,7 @@ instance Read SExpr where
       [(x, s)] -> [(Prim x, s)]
       _ -> case splitOnDelimiter str' of
         (x, str'') -> [(Symb x, str'')]
-
+--}
 -- monad which wraps effectful computations (which may fail)
 data Effect a = Effect (IO (Either Error a))
 
@@ -219,35 +246,43 @@ evalEq env x y = do
   (_, x') <- eval env x
   (_, y') <- eval env y
   case (x', y') of
-    (Prim a, Prim b) -> case a == b of
-      True -> return (env, Prim $ Boolean True)
-      False -> return (env, Prim $ Boolean False)
-    _ -> return (env, Prim $ Boolean False)
+    (Integer a, Integer b) -> case a == b of
+      True -> return (env, T)
+      False -> return (env, F)
+    (Double a, Double b) -> case a == b of
+      True -> return (env, T)
+      False -> return (env, F)
+    (String a, String b) -> case a == b of
+      True -> return (env, T)
+      False -> return (env, F)
+    _ -> return (env, F)
 
 -- evaluation of "atom"
 evalAtom :: Env -> SExpr -> Effect (Env, SExpr)
 evalAtom env x = do
   (_, x') <- eval env x
   case x' of
-    Nil -> return (env, Prim $ Boolean True)
-    Prim _ -> return (env, Prim $ Boolean True)
-    _ -> return (env, Prim $ Boolean False)
+    Nil -> return (env, T)
+    Integer _ -> return (env, T)
+    Double _ -> return (env, T)
+    String _ -> return (env, T)
+    _ -> return (env, F)
 
 -- evaluation of "cond" special form
 evalCond :: Env -> [(SExpr, SExpr)] -> Effect (Env, SExpr)
 evalCond env ((x, y):xs) = do
   (_, x') <- eval env x
   case x' of
-    Prim (Boolean True) -> eval env y
-    Prim (Boolean False) -> evalCond env xs
+    T -> eval env y
+    F -> evalCond env xs
     _ -> runtimeError "Non boolean value as conditional"
 
 evalIf :: Env -> SExpr -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalIf env x y z = do
   (_, x') <- eval env x
   case x' of
-    Prim (Boolean True) -> eval env y
-    Prim (Boolean False) -> eval env z
+    T -> eval env y
+    F -> eval env z
     _ -> runtimeError "Non boolean value as conditional"
 
 -- evaluation of "quote" special form
@@ -279,15 +314,15 @@ evalPlus :: Env -> [SExpr] -> Effect (Env, SExpr)
 evalPlus env [x] = do
   (_, x') <- eval env x
   case x' of
-    Prim (Integer a) -> return (env, x')
-    Prim (Decimal a) -> return (env, x')
+    Integer a -> return (env, x')
+    Double a -> return (env, x')
     _ -> runtimeError $ "Non numerical value " ++ show x'
 evalPlus env (x:xs) = do
   (_, xs') <- evalPlus env xs
   (_, x') <- eval env x
   case (x', xs') of
-    (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a + b)))
-    (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a + b)))
+    (Integer a, Integer b) -> return (env, Integer (a + b))
+    (Double a, Double b) -> return (env, Double (a + b))
     _ -> runtimeError "Numeric type mismatch"
 
 -- evaluation of "-"
@@ -296,8 +331,8 @@ evalMinus env x y = do
   (_, x') <- eval env x
   (_, y') <- eval env y
   case (x', y') of
-    (Prim (Integer a), Prim (Integer b)) -> return (env, Prim $ Integer $ a - b)
-    (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim $ Decimal $ a - b)
+    (Integer a, Integer b) -> return (env, Integer (a - b))
+    (Double a, Double b) -> return (env, Double (a - b))
     _ -> runtimeError "Type mismatch"
 
 -- evaluation of "*"
@@ -305,15 +340,15 @@ evalMult :: Env -> [SExpr] -> Effect (Env, SExpr)
 evalMult env [x] = do
   (_, x') <- eval env x
   case x' of
-    Prim (Integer a) -> return (env, x')
-    Prim (Decimal a) -> return (env, x')
+    Integer a -> return (env, x')
+    Double a -> return (env, x')
     _ -> runtimeError $ "Non numerical value " ++ show x'
 evalMult env (x:xs) = do
   (_, xs') <- evalMult env xs
   (_, x') <- eval env x
   case (x', xs') of
-    (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a * b)))
-    (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a * b)))
+    (Integer a, Integer b) -> return (env, Integer (a * b))
+    (Double a, Double b) -> return (env, Double (a * b))
     _ -> runtimeError "Type mismatch"
 
 -- evaluation of "/"
@@ -321,13 +356,13 @@ evalDiv :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalDiv env x y = do
   (_, y') <- eval env y
   case y' of
-    Prim (Integer 0) -> runtimeError "Division by 0"
-    Prim (Decimal 0.0) -> runtimeError "Division by 0.0"
+    Integer 0 -> runtimeError "Division by 0"
+    Double 0.0 -> runtimeError "Division by 0.0"
     _ -> do
       (_, x') <- eval env x
       case (x', y') of
-        (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a `div` b)))
-        (Prim (Decimal a), Prim (Decimal b)) -> return (env, Prim (Decimal (a / b)))
+        (Integer a,Integer b) -> return (env, Integer (a `div` b))
+        (Double a, Double b) -> return (env, Double (a / b))
         _ -> runtimeError $ "Type mismatch"
 
 -- evaluation of "%"
@@ -335,60 +370,50 @@ evalMod :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalMod env x y = do
   (_, y') <- eval env y
   case y' of
-    Prim (Integer 0) -> runtimeError "Division by 0"
+    Integer 0 -> runtimeError "Division by 0"
     _ -> do
       (_, x') <- eval env x
       case (x', y') of
-        (Prim (Integer a), Prim (Integer b)) -> return (env, Prim (Integer (a `mod` b)))
+        (Integer a,Integer b) -> return (env, Integer (a `mod` b))
         _ -> runtimeError $ "Type mismatch"
 
 -- evaluation of "<"
 evalLess :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalLess env x y = do
   (_, x') <- eval env x
-  case x' of
-    Prim (Integer a) -> do
-      (_, y') <- eval env y
-      case y' of
-        Prim (Integer b) -> case a < b of
-          True -> return (env, Prim (Boolean True))
-          False -> return (env, Prim (Boolean False))
-        _ -> runtimeError "Type mismatch"
-    Prim (Decimal a) -> do
-      (_, y') <- eval env y
-      case y' of
-        Prim (Decimal b) -> case a < b of
-          True -> return (env, Prim (Boolean True))
-          False -> return (env, Prim (Boolean False))
-        _ -> runtimeError "Type mismatch"
+  (_, y') <- eval env y
+  case (x', y') of
+    (Integer a, Integer b) -> case a < b of
+      True -> return (env,T)
+      False -> return (env, F)
+    (Double a, Double b) -> case a < b of
+      True -> return (env, T)
+      False -> return (env, F)
     _ -> runtimeError "Type mismatch"
 
 -- evaluation of ">"
 evalGreater :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalGreater env x y = do
   (_, x') <- eval env x
-  case x' of
-    Prim (Integer a) -> do
-      (_, y') <- eval env y
-      case y' of
-        Prim (Integer b) -> case a > b of
-          True -> return (env, Prim (Boolean True))
-          False -> return (env, Prim (Boolean False))
-        _ -> runtimeError "Type mismatch"
-    Prim (Decimal a) -> do
-      (_, y') <- eval env y
-      case y' of
-        Prim (Decimal b) -> case a > b of
-          True -> return (env, Prim (Boolean True))
-          False -> return (env, Prim (Boolean False))
-        _ -> runtimeError "Type mismatch"
+  (_, y') <- eval env y
+  case (x', y') of
+    (Integer a, Integer b) -> case a > b of
+      True -> return (env,T)
+      False -> return (env, F)
+    (Double a, Double b) -> case a > b of
+      True -> return (env, T)
+      False -> return (env, F)
     _ -> runtimeError "Type mismatch"
 
 -- evaluation function, the core of the lisp interpreter
 eval :: Env -> SExpr -> Effect (Env, SExpr)
 -- evaluation of atomic values (self-evaluation)
 eval env Nil = return (env, Nil)
-eval env (Prim x) = return (env, Prim x)
+eval env T = return (env, T)
+eval env F = return (env, F)
+eval env (Integer x) = return (env, Integer x)
+eval env (Double x) = return (env, Double x)
+eval env (String x) = return (env, String x)
 -- evaluation of symbols (lookup)
 eval env (Symb x) = case Map.lookup x env of
   Just x' -> return (env, x')
