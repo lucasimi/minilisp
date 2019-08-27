@@ -2,8 +2,10 @@ module Main where
 
 import qualified Data.Map as Map
 
-import Eval
-import Minilisp
+import Utils
+import Tokenizer
+import Parser
+import Interpreter
 
 import System.Environment
 import System.Console.Haskeline
@@ -17,7 +19,7 @@ getInput str lines = do
   case input of
     Nothing -> do
       getInput str lines
-    Just str' -> case reads (str ++ " " ++ str') :: [(TokenTree, String)] of
+    Just str' -> case reads (str ++ " " ++ str') :: [(AST, String)] of
       [(s, s')] -> case dropLeadingBlanks s' == "" of
         True -> liftIO $ return $ str ++ " " ++ str'
         False -> getInput (str ++ " " ++ str') (lines + 1)
@@ -29,7 +31,7 @@ repl :: Env -> InputT IO ()
 repl env = do
   input <- getInput "" 0
   case input of
-    str -> case reads str :: [(TokenTree, String)] of
+    str -> case reads str :: [(AST, String)] of
       [(s, s')] -> case dropLeadingBlanks s' == "" of
         True -> let Effect x = eval env (compile s) in do
           x' <- liftIO x
@@ -46,7 +48,7 @@ repl env = do
 repl' :: (Env, String) -> IO ()
 repl' (env, s) = case dropWhile (`elem` " \t\n") s of
   [] -> return ()
-  _ -> case reads s :: [(TokenTree, String)] of
+  _ -> case reads s :: [(AST, String)] of
     [] -> putStrLn $ "syntax error: " ++ show s
     [(e, s')] -> case dropLeadingBlanks s' == "" of
       True -> let Effect x = eval env (compile e) in do
