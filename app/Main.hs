@@ -1,15 +1,14 @@
 module Main where
 
 import qualified Data.Map as Map
+import System.Environment
+import System.Console.Haskeline
+import Control.Monad.IO.Class
 
 import Utils
 import Tokenizer
 import Parser
 import Interpreter
-
-import System.Environment
-import System.Console.Haskeline
-import Control.Monad.IO.Class
 
 -- Read input from keyboard
 getInput :: String -> Int -> InputT IO (String)
@@ -17,12 +16,13 @@ getInput str lines = do
   input <- getInputLine $ "[" ++ show lines ++ "]> "
            ++ (concat $ replicate open "\t")
   case input of
-    Nothing -> do
-      getInput str lines
-    Just str' -> case reads (str ++ " " ++ str') :: [(AST, String)] of
-      [(s, s')] -> case dropLeadingBlanks s' == "" of
-        True -> liftIO $ return $ str ++ " " ++ str'
-        False -> getInput (str ++ " " ++ str') (lines + 1)
+    Nothing -> getInput "" 0
+    Just str' -> case isBlank str' of
+      True -> getInput str lines
+      False -> case reads (str ++ " " ++ str') :: [(AST, String)] of
+        [(s, s')] -> case dropLeadingBlanks s' == "" of
+          True -> liftIO $ return $ str ++ " " ++ str'
+          False -> getInput (str ++ " " ++ str') (lines + 1)
   where
     open = length $ filter (\x -> x == '(') str
 

@@ -30,18 +30,23 @@ instance Read Token where
 data AST = Empty | Leaf Token | Node AST AST deriving Show
 
 instance Read AST where
-  readsPrec _ str = case reads str :: [(Token, String)] of
-    [(x, s)] -> [(Leaf x, s)]
-    _ -> case split str of
-      ("", '(':str') -> case reads str' :: [(AST, String)] of
-        [(x, str'')] -> case split str'' of
-          ("", ')':str''') -> [(Node x Empty, str''')]
-          ("", '.':str''') -> case reads ('(':str''') :: [(AST, String)] of
-              [(Node y Empty, str'''')] -> [(Node x y, str'''')]
-              _ -> []
+  readsPrec _ str = case dropLeadingBlanks str of
+    "" -> []
+    ')':_ -> []
+    '.':_ -> []
+    '(':str' -> case dropLeadingBlanks str' of
+      ')':str'' -> [(Empty, str'')]
+      _ -> case reads str' :: [(AST, String)] of
+        [(x, str'')] -> case dropLeadingBlanks str'' of
+          "" -> []
+          ')':str''' -> [(Node x Empty, str''')]
+          '.':str''' -> case reads ('(':str''') :: [(AST, String)] of
+            [(Node y Empty, str'''')] -> [(Node x y, str'''')]
+            _ -> []
           _ -> case reads ('(':str'') :: [(AST, String)] of
-              [(y, s)] -> [(Node x y, s)]
-              _ -> []
-        _ -> case split str' of
-          ("", ')':str'') -> [(Empty, str'')]
-          _ -> []
+            [(y, str''')] -> [(Node x y, str''')]
+            _ -> []
+        _ -> []
+    _ -> case reads str :: [(Token, String)] of
+      [(x, str')] -> [(Leaf x, str')]
+      _ -> []
