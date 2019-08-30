@@ -8,26 +8,26 @@ data Token = IntegerType Integer
            | BoolType Bool
            | StringType String
            | SymbType String
-           deriving Show
+           deriving (Show, Eq)
 
 instance Read Token where
-  readsPrec _ str =
-    case reads str :: [(String, String)] of
+  readsPrec _ str = case dropLeadingBlanks str of
+    "" -> []
+    '(':_ -> []
+    ')':_ -> []
+    '.':_ -> []
+    str' -> case reads str' :: [(String, String)] of
       [(x, s)] -> [(StringType x, s)]
-      _ -> case split str of
-        ("", '(':_) -> []
-        ("", ')':_) -> []
-        ("", '.':_) -> []
-        (str', s) -> case reads str' :: [(Integer, String)] of
-          [(x, s')] -> [(IntegerType x, s' ++ s)]
-          _ -> case reads str' :: [(Double, String)] of
-            [(x, s')] -> [(DoubleType x, s' ++ s)]
-            _ -> case split str' of
-              ("#t", s') -> [(BoolType True, s' ++ s)]
-              ("#f", s') -> [(BoolType False, s' ++ s)]
-              (str'', s') -> [(SymbType str'', s' ++ s)]
+      _ -> case reads str' :: [(Integer, String)] of
+        [(x, s)] -> [(IntegerType x, s)]
+        _ -> case reads str' :: [(Double, String)] of
+          [(x, s)] -> [(DoubleType x, s)]
+          _ -> case split str' of
+            ("#t", s) -> [(BoolType True, s)]
+            ("#f", s) -> [(BoolType False, s)]
+            (str'', s) -> [(SymbType str'', s)]
 
-data AST = Empty | Leaf Token | Node AST AST deriving Show
+data AST = Empty | Leaf Token | Node AST AST deriving (Show, Eq)
 
 instance Read AST where
   readsPrec _ str = case dropLeadingBlanks str of
