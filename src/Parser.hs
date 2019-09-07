@@ -18,7 +18,7 @@ data SExpr = Nil
            | String String
            | Symb String
            | Pair SExpr SExpr
-           | Func (Env -> SExpr -> Effect (Env, SExpr))
+           | Func (Env -> [SExpr] -> Effect (Env, SExpr))
            | CAR SExpr
            | CDR SExpr
            | CONS SExpr SExpr
@@ -27,7 +27,7 @@ data SExpr = Nil
            | QUOTE SExpr
            | COND [(SExpr, SExpr)]
            | IF SExpr SExpr SExpr
-           | LAMBDA SExpr SExpr
+           | LAMBDA [SExpr] SExpr
            | LABEL SExpr SExpr
            | DEFINE SExpr SExpr
            | PLUS [SExpr]
@@ -47,12 +47,12 @@ instance Show SExpr where
   show (String x) = show x
   show (Symb x) = x
   show (Pair x Nil) = "(" ++ show x ++ ")"
-  show (Pair x y) = if isList (Pair x y)
-                   then "(" ++ show x ++ " " ++ (tail $ show y)
-                   else "(" ++ show x ++ " . " ++ show y ++ ")"
-                    where isList Nil = True
-                          isList (Pair x y) = isList y
-                          isList _ = False
+  show (Pair x y) = case isList (Pair x y) of
+    True -> "(" ++ show x ++ " " ++ (tail $ show y)
+    False -> "(" ++ show x ++ " . " ++ show y ++ ")"
+    where isList Nil = True
+          isList (Pair x y) = isList y
+          isList _ = False
   show (Func _) = "<function>"
   show _ = "<unevaluated>"
 
@@ -74,7 +74,7 @@ compile (Node (Leaf (SymbType "eq")) (Node x (Node y Empty))) = EQQ (compile x) 
 compile (Node (Leaf (SymbType "quote")) (Node x Empty)) = QUOTE (compile x)
 compile (Node (Leaf (SymbType "cond")) x) = COND (compileCoupleList x)
 compile (Node (Leaf (SymbType "if")) (Node x (Node y (Node z Empty)))) = IF (compile x) (compile y) (compile z)
-compile (Node (Leaf (SymbType "lambda")) (Node x (Node y Empty))) = LAMBDA (compile x) (compile y)
+compile (Node (Leaf (SymbType "lambda")) (Node x (Node y Empty))) = LAMBDA (compileList x) (compile y)
 compile (Node (Leaf (SymbType "label")) (Node x (Node y Empty))) = LABEL (compile x) (compile y)
 compile (Node (Leaf (SymbType "define")) (Node x (Node y Empty))) = DEFINE (compile x) (compile y)
 compile (Node (Leaf (SymbType "+")) x) = PLUS (compileList x)

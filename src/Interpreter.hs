@@ -11,11 +11,12 @@ printEnv env = Effect $ do
   return $ Right ()
 
 -- bind symbols to values
-bindLocal :: SExpr -> SExpr -> LocalEnv -> LocalEnv
-bindLocal Nil Nil env = env
-bindLocal (Pair (Symb x) xs) (Pair val vals) env = Map.insert x val (bindLocal xs vals env)
+bindLocal :: [SExpr] -> [SExpr] -> LocalEnv -> LocalEnv
+bindLocal [] [] env = env
+bindLocal ((Symb x):xs) (val:vals) env = Map.insert x val (bindLocal xs vals env)
+bindLocal _ _ env = env
 
-bind :: SExpr -> SExpr -> Env -> Env
+bind :: [SExpr] -> [SExpr] -> Env -> Env
 bind x y (env:envs) = (bindLocal x y env):envs
 
 seek :: SExpr -> Env -> Effect (Env, SExpr)
@@ -101,11 +102,12 @@ evalQuote env x = do
   return (env, x)
 
 -- evaluation of "lambda" special form
-evalLambda :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
+evalLambda :: Env -> [SExpr] -> SExpr -> Effect (Env, SExpr)
 evalLambda env x y = do
   return (env, Func (\e a -> do
-    printEnv (bind x a (Map.empty:e)) 
-    eval (bind x a (Map.empty:e)) y))
+    --printEnv (bind x a (Map.empty:e))
+    --eval ((bind x a e)++env) y))
+    eval ((bind x a (Map.empty:e)) ++ env) y))
 
 -- evaluation of "label" special form
 evalLabel :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
@@ -113,13 +115,13 @@ evalLabel env (Symb x) y = do
   (_, y') <- eval env y
   case  y' of
     Func f -> return (env, Func g)
-      where g = \e a -> f (bind (Pair (Symb x) Nil) (Pair (Func g) Nil) e) a
+      where g = \e a -> f (bind [Symb x] [Func g] e) a
 
 -- evaluation of "define" special form
 evalDefine :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalDefine env (Symb x) y = do
   (_, y') <- eval env y
-  return (bind (Pair (Symb x) Nil) (Pair y' Nil) env, Symb x)
+  return (bind [Symb x] [y'] env, Symb x)
 
 -- evaluation of "+"
 evalPlus :: Env -> [SExpr] -> Effect (Env, SExpr)
@@ -235,8 +237,8 @@ eval env (Double x) = return (env, Double x)
 eval env (String x) = return (env, String x)
 -- evaluation of symbols (lookup)
 eval env (Symb x) = do
-  (_, x') <- seek (Symb x) env
-  return (env, x')
+  (env', x') <- seek (Symb x) env
+  return (env', x')
 -- evaluation of built-in functions (function application) and special forms (custom evaluation)
 eval env (CAR x) = evalCar env x
 eval env (CDR x) = evalCdr env x
@@ -258,20 +260,20 @@ eval env (LESS x y) = evalLess env x y
 eval env (GREATER x y) = evalGreater env x y
 -- evaluation of non built-in functions
 eval env (Pair f x) = do
-  (_, f') <- eval env f
+  (env', f') <- eval env f
   case f' of
     Func g -> do
       (_, x') <- evalList env x
-      (_, g') <- g env x'
+      (_, g') <- g env' x'
       return (env, g')
     _ -> runtimeError $ "Unknown expression"
 -- evaluation of other cases
 eval _ _ = runtimeError $ "Unknown expression"
 
 -- evaluate all elements in a list
-evalList :: Env -> SExpr -> Effect (Env, SExpr)
-evalList env Nil = return (env, Nil)
+evalList :: Env -> SExpr -> Effect (Env, [SExpr])
+evalList env Nil = return (env, [])
 evalList env (Pair x xs) = do
   (_, x') <- eval env x
   (_, xs') <- evalList env xs
-  return (env, Pair x' xs')
+  return (env, x':xs')

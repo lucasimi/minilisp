@@ -5,3 +5,4 @@ main = do
   testReadTokens
   testReadAST
   testCompileAST
+  testEvalSExpr
