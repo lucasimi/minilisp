@@ -5,10 +5,25 @@ import qualified Data.Map as Map
 import Utils
 import Parser
 
+printEnv :: Env -> Effect ()
+printEnv env = Effect $ do
+  putStrLn $ show env
+  return $ Right ()
+
 -- bind symbols to values
+bindLocal :: SExpr -> SExpr -> LocalEnv -> LocalEnv
+bindLocal Nil Nil env = env
+bindLocal (Pair (Symb x) xs) (Pair val vals) env = Map.insert x val (bindLocal xs vals env)
+
 bind :: SExpr -> SExpr -> Env -> Env
-bind Nil Nil env = env
-bind (Pair (Symb x) xs) (Pair val vals) env = Map.insert x val (bind xs vals env)
+bind x y (env:envs) = (bindLocal x y env):envs
+
+seek :: SExpr -> Env -> Effect (Env, SExpr)
+seek (Symb x) [] = runtimeError $ "Unbound symbol " ++ x
+seek (Symb x) (env:envs) = case Map.lookup x env of
+  Just y -> return (env:envs, y)
+  Nothing -> seek (Symb x) envs
+
 
 -- returns a runtime error with specified message
 runtimeError :: String -> Effect (Env, SExpr)
@@ -88,7 +103,9 @@ evalQuote env x = do
 -- evaluation of "lambda" special form
 evalLambda :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalLambda env x y = do
-  return (env, Func (\e a -> eval (bind x a e) y))
+  return (env, Func (\e a -> do
+    printEnv (bind x a (Map.empty:e)) 
+    eval (bind x a (Map.empty:e)) y))
 
 -- evaluation of "label" special form
 evalLabel :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
@@ -96,13 +113,13 @@ evalLabel env (Symb x) y = do
   (_, y') <- eval env y
   case  y' of
     Func f -> return (env, Func g)
-      where g = \e a -> f (bind (Pair (Symb x) Nil) (Pair (Func g) Nil) e) a 
+      where g = \e a -> f (bind (Pair (Symb x) Nil) (Pair (Func g) Nil) e) a
 
 -- evaluation of "define" special form
 evalDefine :: Env -> SExpr -> SExpr -> Effect (Env, SExpr)
 evalDefine env (Symb x) y = do
   (_, y') <- eval env y
-  return (Map.insert x y' env, Symb x)
+  return (bind (Pair (Symb x) Nil) (Pair y' Nil) env, Symb x)
 
 -- evaluation of "+"
 evalPlus :: Env -> [SExpr] -> Effect (Env, SExpr)
@@ -217,9 +234,9 @@ eval env (Integer x) = return (env, Integer x)
 eval env (Double x) = return (env, Double x)
 eval env (String x) = return (env, String x)
 -- evaluation of symbols (lookup)
-eval env (Symb x) = case Map.lookup x env of
-  Just x' -> return (env, x')
-  Nothing -> runtimeError $ "Unbound symbol " ++ x
+eval env (Symb x) = do
+  (_, x') <- seek (Symb x) env
+  return (env, x')
 -- evaluation of built-in functions (function application) and special forms (custom evaluation)
 eval env (CAR x) = evalCar env x
 eval env (CDR x) = evalCdr env x

@@ -6,7 +6,8 @@ import Utils
 import Tokenizer
 
 -- environment data type, where variables are stored
-type Env = Map.Map String SExpr
+type LocalEnv = Map.Map String SExpr
+type Env = [LocalEnv]
 
 -- S-Expression data type
 data SExpr = Nil

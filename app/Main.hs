@@ -70,7 +70,7 @@ main = do
   case args of
     [] -> do
       putStrLn "Minilisp interactive REPL environment [CTRL+c to quit]"
-      runInputT defaultSettings (repl Map.empty)
+      runInputT defaultSettings (repl [Map.empty])
     [path] -> do
       s <- readFile path
-      repl' (Map.empty, s)
+      repl' ([Map.empty], s)
