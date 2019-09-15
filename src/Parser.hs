@@ -18,7 +18,7 @@ data SExpr = Nil
            | String String
            | Symb String
            | Pair SExpr SExpr
-           | Func (Env -> [SExpr] -> Effect (Env, SExpr))
+           | Func [SExpr] SExpr
            | CAR SExpr
            | CDR SExpr
            | CONS SExpr SExpr
@@ -53,7 +53,7 @@ instance Show SExpr where
     where isList Nil = True
           isList (Pair x y) = isList y
           isList _ = False
-  show (Func _) = "<function>"
+  show (Func _ _) = "<function>"
   show _ = "<unevaluated>"
 
 compile :: AST -> SExpr
