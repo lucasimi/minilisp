@@ -6,8 +6,8 @@ import Utils
 import Tokenizer
 
 -- environment data type, where variables are stored
-type LocalEnv = Map.Map String SExpr
-type Env = [LocalEnv]
+type Env = Map.Map String SExpr
+type Ctx = [Env]
 
 -- S-Expression data type
 data SExpr = Nil
@@ -18,7 +18,7 @@ data SExpr = Nil
            | String String
            | Symb String
            | Pair SExpr SExpr
-           | Func [SExpr] SExpr
+           | Lambda [SExpr] SExpr
            | CAR SExpr
            | CDR SExpr
            | CONS SExpr SExpr
@@ -27,7 +27,6 @@ data SExpr = Nil
            | QUOTE SExpr
            | COND [(SExpr, SExpr)]
            | IF SExpr SExpr SExpr
-           | LAMBDA [SExpr] SExpr
            | LABEL SExpr SExpr
            | DEFINE SExpr SExpr
            | PLUS [SExpr]
@@ -37,6 +36,7 @@ data SExpr = Nil
            | MOD SExpr SExpr
            | LESS SExpr SExpr
            | GREATER SExpr SExpr
+           deriving Eq
 
 instance Show SExpr where
   show Nil = "()"
@@ -53,7 +53,7 @@ instance Show SExpr where
     where isList Nil = True
           isList (Pair x y) = isList y
           isList _ = False
-  show (Func _ _) = "<function>"
+  show (Lambda _ _) = "<function>"
   show _ = "<unevaluated>"
 
 compile :: AST -> SExpr
@@ -74,7 +74,7 @@ compile (Node (Leaf (SymbType "eq")) (Node x (Node y Empty))) = EQQ (compile x) 
 compile (Node (Leaf (SymbType "quote")) (Node x Empty)) = QUOTE (compile x)
 compile (Node (Leaf (SymbType "cond")) x) = COND (compileCoupleList x)
 compile (Node (Leaf (SymbType "if")) (Node x (Node y (Node z Empty)))) = IF (compile x) (compile y) (compile z)
-compile (Node (Leaf (SymbType "lambda")) (Node x (Node y Empty))) = LAMBDA (compileList x) (compile y)
+compile (Node (Leaf (SymbType "lambda")) (Node x (Node y Empty))) = Lambda (compileList x) (compile y)
 compile (Node (Leaf (SymbType "label")) (Node x (Node y Empty))) = LABEL (compile x) (compile y)
 compile (Node (Leaf (SymbType "define")) (Node x (Node y Empty))) = DEFINE (compile x) (compile y)
 compile (Node (Leaf (SymbType "+")) x) = PLUS (compileList x)

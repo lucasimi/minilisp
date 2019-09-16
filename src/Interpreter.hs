@@ -11,257 +11,256 @@ printEnv env = Effect $ do
   return $ Right ()
 
 -- bind symbols to values
-bindLocal :: [SExpr] -> [SExpr] -> LocalEnv -> LocalEnv
-bindLocal [] [] env = env
-bindLocal ((Symb x):xs) (val:vals) env = Map.insert x val (bindLocal xs vals env)
-bindLocal _ _ env = env
+bindEnv :: [SExpr] -> [SExpr] -> Env -> Env
+bindEnv [] [] env = env
+bindEnv ((Symb x):xs) (val:vals) env = Map.insert x val (bindEnv xs vals env)
+bindEnv _ _ env = env
 
-bind :: [SExpr] -> [SExpr] -> Env -> Env
-bind x y (env:envs) = (bindLocal x y env):envs
+bindCtx :: [SExpr] -> [SExpr] -> Ctx -> Ctx
+bindCtx x y (env:envs) = (bindEnv x y env):envs
 
-seek :: SExpr -> Env -> Maybe (Env, SExpr)
-seek (Symb x) [] = Nothing
-seek (Symb x) (env:envs) = case Map.lookup x env of
+seekEnv :: SExpr -> Env -> Maybe SExpr
+seekEnv (Symb x) env = Map.lookup x env
+
+seekCtx :: SExpr -> Ctx -> Maybe (Ctx, SExpr)
+seekCtx (Symb x) [] = Nothing
+seekCtx (Symb x) (env:envs) = case seekEnv (Symb x) env of
   Just y -> Just (env:envs, y)
-  Nothing -> seek (Symb x) envs
+  Nothing -> seekCtx (Symb x) envs
 
 -- returns a runtime error with specified message
-runtimeError :: String -> Effect (LocalEnv, Env, SExpr)
+runtimeError :: String -> Effect (Env, Ctx, SExpr)
 runtimeError x = Effect $ return $ Left $ RuntimeErr x
 
 -- evaluation of "car"
-evalCar :: LocalEnv -> Env -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalCar root branch x = do
-  (_, _, x') <- eval root branch x
+evalCar :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
+evalCar env ctx x = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    Pair a _ -> return (root, branch, a)
+    Pair a _ -> return (env, ctx, a)
 
 -- evaluation of "cdr"
-evalCdr :: LocalEnv -> Env -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalCdr root branch x = do
-  (_, _, x') <- eval root branch x
+evalCdr :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
+evalCdr env ctx x = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    Pair _ b -> return (root, branch, b)
+    Pair _ b -> return (env, ctx, b)
 
 -- evaluation of "cons"
-evalCons :: LocalEnv -> Env -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalCons root branch x y = do
-  (_, _, x') <- eval root branch x
-  (_, _, y') <- eval root branch y
-  return (root, branch, Pair x' y')
+evalCons :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalCons env ctx x y = do
+  (_, _, x') <- eval env ctx x
+  (_, _, y') <- eval env ctx y
+  return (env, ctx, Pair x' y')
 
 -- evaluation of "eq"
-evalEq :: LocalEnv -> Env -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalEq root branch x y = do
-  (_, _, x') <- eval root branch x
-  (_, _, y') <- eval root branch y
+evalEq :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalEq env ctx x y = do
+  (_, _, x') <- eval env ctx x
+  (_, _, y') <- eval env ctx y
   case (x', y') of
     (Integer a, Integer b) -> case a == b of
-      True -> return (root, branch, T)
-      False -> return (root, branch, F)
+      True -> return (env, ctx, T)
+      False -> return (env, ctx, F)
     (Double a, Double b) -> case a == b of
-      True -> return (root, branch, T)
-      False -> return (root, branch, F)
+      True -> return (env, ctx, T)
+      False -> return (env, ctx, F)
     (String a, String b) -> case a == b of
-      True -> return (root, branch, T)
-      False -> return (root, branch, F)
-    _ -> return (root, branch, F)
+      True -> return (env, ctx, T)
+      False -> return (env, ctx, F)
+    _ -> return (env, ctx, F)
 
 -- evaluation of "atom"
-evalAtom :: LocalEnv -> Env -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalAtom root branch x = do
-  (_, _, x') <- eval root branch x
+evalAtom :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
+evalAtom env ctx x = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    Nil -> return (root, branch, T)
-    Integer _ -> return (root, branch, T)
-    Double _ -> return (root, branch, T)
-    String _ -> return (root, branch, T)
-    _ -> return (root, branch, F)
+    Nil -> return (env, ctx, T)
+    Integer _ -> return (env, ctx, T)
+    Double _ -> return (env, ctx, T)
+    String _ -> return (env, ctx, T)
+    _ -> return (env, ctx, F)
 
 -- evaluation of "cond" special form
-evalCond :: LocalEnv -> Env -> [(SExpr, SExpr)] -> Effect (LocalEnv, Env, SExpr)
-evalCond root branch ((x, y):xs) = do
-  (_, _, x') <- eval root branch x
+evalCond :: Env -> Ctx -> [(SExpr, SExpr)] -> Effect (Env, Ctx, SExpr)
+evalCond env ctx ((x, y):xs) = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    T -> eval root branch y
-    F -> evalCond root branch xs
+    T -> eval env ctx y
+    F -> evalCond env ctx xs
     _ -> runtimeError "Non boolean value as conditional"
 
-evalIf :: LocalEnv -> Env -> SExpr -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalIf root branch x y z = do
-  (_, _, x') <- eval root branch x
+evalIf :: Env -> Ctx -> SExpr -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalIf env ctx x y z = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    T -> eval root branch y
-    F -> eval root branch z
+    T -> eval env ctx y
+    F -> eval env ctx z
     _ -> runtimeError "Non boolean value as conditional"
 
 -- evaluation of "quote" special form
-evalQuote :: LocalEnv -> Env -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalQuote root branch x = do
-  return (root, branch, x)
-
--- evaluation of "lambda" special form
-evalLambda :: LocalEnv -> Env -> [SExpr] -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalLambda root branch x y = return (root, branch, Func x y)
+evalQuote :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
+evalQuote env ctx x = do
+  return (env, ctx, x)
 
 -- evaluation of "define" special form
-evalDefine :: LocalEnv -> Env -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalDefine root branch (Symb x) y = do
-  (_, _, y') <- eval root branch y
-  return (head (bind [Symb x] [y'] [root]), branch, Symb x)
+evalDefine :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalDefine env ctx (Symb x) y = do
+  (_, _, y') <- eval env ctx y
+  return (bindEnv [Symb x] [y'] env, ctx, Symb x)
 
 -- evaluation of "+"
-evalPlus :: LocalEnv -> Env -> [SExpr] -> Effect (LocalEnv, Env, SExpr)
-evalPlus root branch [x] = do
-  (_, _, x') <- eval root branch x
+evalPlus :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalPlus env ctx [x] = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    Integer a -> return (root, branch, x')
-    Double a -> return (root, branch, x')
+    Integer a -> return (env, ctx, x')
+    Double a -> return (env, ctx, x')
     _ -> runtimeError $ "Non numerical value " ++ show x'
-evalPlus root branch (x:xs) = do
-  (_, _, xs') <- evalPlus root branch xs
-  (_, _, x') <- eval root branch x
+evalPlus env ctx (x:xs) = do
+  (_, _, xs') <- evalPlus env ctx xs
+  (_, _, x') <- eval env ctx x
   case (x', xs') of
-    (Integer a, Integer b) -> return (root, branch, Integer (a + b))
-    (Double a, Double b) -> return (root, branch, Double (a + b))
+    (Integer a, Integer b) -> return (env, ctx, Integer (a + b))
+    (Double a, Double b) -> return (env, ctx, Double (a + b))
     _ -> runtimeError "Numeric type mismatch"
 
 -- evaluation of "-"
-evalMinus :: LocalEnv -> Env -> [SExpr] -> Effect (LocalEnv, Env, SExpr)
-evalMinus root branch [x] = do
-  (_, _, x') <- eval root branch x
+evalMinus :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalMinus env ctx [x] = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    Integer a -> return (root, branch, Integer (-a))
-    Double a -> return (root, branch, Double (-a))
+    Integer a -> return (env, ctx, Integer (-a))
+    Double a -> return (env, ctx, Double (-a))
     _ -> runtimeError "Type mismatch"
-evalMinus root branch [x, y] = do
-  (_, _, x') <- eval root branch x
-  (_, _, y') <- eval root branch y
+evalMinus env ctx [x, y] = do
+  (_, _, x') <- eval env ctx x
+  (_, _, y') <- eval env ctx y
   case (x', y') of
-    (Integer a, Integer b) -> return (root, branch, Integer (a - b))
-    (Double a, Double b) -> return (root, branch, Double (a - b))
+    (Integer a, Integer b) -> return (env, ctx, Integer (a - b))
+    (Double a, Double b) -> return (env, ctx, Double (a - b))
     _ -> runtimeError "Type mismatch"
 evalMinus _ _ _ = runtimeError "Wrong number of arguments"
 
 -- evaluation of "*"
-evalMult :: LocalEnv -> Env -> [SExpr] -> Effect (LocalEnv, Env, SExpr)
-evalMult root branch [x] = do
-  (_, _, x') <- eval root branch x
+evalMult :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalMult env ctx [x] = do
+  (_, _, x') <- eval env ctx x
   case x' of
-    Integer a -> return (root, branch, x')
-    Double a -> return (root, branch, x')
+    Integer a -> return (env, ctx, x')
+    Double a -> return (env, ctx, x')
     _ -> runtimeError $ "Non numerical value " ++ show x'
-evalMult root branch (x:xs) = do
-  (_, _, xs') <- evalMult root branch xs
-  (_, _, x') <- eval root branch x
+evalMult env ctx (x:xs) = do
+  (_, _, xs') <- evalMult env ctx xs
+  (_, _, x') <- eval env ctx x
   case (x', xs') of
-    (Integer a, Integer b) -> return (root, branch, Integer (a * b))
-    (Double a, Double b) -> return (root, branch, Double (a * b))
+    (Integer a, Integer b) -> return (env, ctx, Integer (a * b))
+    (Double a, Double b) -> return (env, ctx, Double (a * b))
     _ -> runtimeError "Type mismatch"
 
 -- evaluation of "/"
-evalDiv :: LocalEnv -> Env -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalDiv root branch x y = do
-  (_, _, y') <- eval root branch y
+evalDiv :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalDiv env ctx x y = do
+  (_, _, y') <- eval env ctx y
   case y' of
     Integer 0 -> runtimeError "Division by 0"
     Double 0.0 -> runtimeError "Division by 0.0"
     _ -> do
-      (_, _, x') <- eval root branch x
+      (_, _, x') <- eval env ctx x
       case (x', y') of
-        (Integer a,Integer b) -> return (root, branch, Integer (a `div` b))
-        (Double a, Double b) -> return (root, branch, Double (a / b))
+        (Integer a,Integer b) -> return (env, ctx, Integer (a `div` b))
+        (Double a, Double b) -> return (env, ctx, Double (a / b))
         _ -> runtimeError $ "Type mismatch"
 
 -- evaluation of "%"
-evalMod :: LocalEnv -> Env -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalMod root branch x y = do
-  (_, _, y') <- eval root branch y
+evalMod :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalMod env ctx x y = do
+  (_, _, y') <- eval env ctx y
   case y' of
     Integer 0 -> runtimeError "Division by 0"
     _ -> do
-      (_, _, x') <- eval root branch x
+      (_, _, x') <- eval env ctx x
       case (x', y') of
-        (Integer a, Integer b) -> return (root, branch, Integer (a `mod` b))
+        (Integer a, Integer b) -> return (env, ctx, Integer (a `mod` b))
         _ -> runtimeError $ "Type mismatch"
 
 -- evaluation of "<"
-evalLess :: LocalEnv -> Env -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalLess root branch x y = do
-  (_, _, x') <- eval root branch x
-  (_, _, y') <- eval root branch y
+evalLess :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalLess env ctx x y = do
+  (_, _, x') <- eval env ctx x
+  (_, _, y') <- eval env ctx y
   case (x', y') of
     (Integer a, Integer b) -> case a < b of
-      True -> return (root, branch, T)
-      False -> return (root, branch, F)
+      True -> return (env, ctx, T)
+      False -> return (env, ctx, F)
     (Double a, Double b) -> case a < b of
-      True -> return (root, branch, T)
-      False -> return (root, branch, F)
+      True -> return (env, ctx, T)
+      False -> return (env, ctx, F)
     _ -> runtimeError "Type mismatch"
 
 -- evaluation of ">"
-evalGreater :: LocalEnv -> Env -> SExpr -> SExpr -> Effect (LocalEnv, Env, SExpr)
-evalGreater root branch x y = do
-  (_, _, x') <- eval root branch x
-  (_, _, y') <- eval root branch y
+evalGreater :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalGreater env ctx x y = do
+  (_, _, x') <- eval env ctx x
+  (_, _, y') <- eval env ctx y
   case (x', y') of
     (Integer a, Integer b) -> case a > b of
-      True -> return (root, branch, T)
-      False -> return (root, branch, F)
+      True -> return (env, ctx, T)
+      False -> return (env, ctx, F)
     (Double a, Double b) -> case a > b of
-      True -> return (root, branch, T)
-      False -> return (root, branch, F)
+      True -> return (env, ctx, T)
+      False -> return (env, ctx, F)
     _ -> runtimeError "Type mismatch"
 
 -- evaluation function, the core of the lisp interpreter
-eval :: LocalEnv -> Env -> SExpr -> Effect (LocalEnv, Env, SExpr)
+eval :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
 -- evaluation of atomic values (self-evaluation)
-eval root branch Nil = return (root, branch, Nil)
-eval root branch T = return (root, branch, T)
-eval root branch F = return (root, branch, F)
-eval root branch (Integer x) = return (root, branch, Integer x)
-eval root branch (Double x) = return (root, branch, Double x)
-eval root branch (String x) = return (root, branch, String x)
+eval env ctx Nil = return (env, ctx, Nil)
+eval env ctx T = return (env, ctx, T)
+eval env ctx F = return (env, ctx, F)
+eval env ctx (Integer x) = return (env, ctx, Integer x)
+eval env ctx (Double x) = return (env, ctx, Double x)
+eval env ctx (String x) = return (env, ctx, String x)
+eval env ctx (Lambda x y) = return (env, ctx, Lambda x y)
 -- evaluation of symbols (lookup)
-eval root branch (Symb x) = case seek (Symb x) branch of
-  Just (branch', y) -> return (root, branch', y)
-  Nothing -> case seek (Symb x) [root] of
-    Just (branch', y) -> return (root, branch', y)
+eval env ctx (Symb x) = case seekCtx (Symb x) ctx of
+  Just (ctx', y) -> return (env, ctx', y)
+  Nothing -> case seekEnv (Symb x) env of
+    Just y -> return (env, [], y)
     Nothing -> runtimeError $ "Unbound symbol " ++ show x
 -- evaluation of built-in functions (function application) and special forms (custom evaluation)
-eval root branch (CAR x) = evalCar root branch x
-eval root branch (CDR x) = evalCdr root branch x
-eval root branch (CONS x y) = evalCons root branch x y
-eval root branch (EQQ x y) = evalEq root branch x y
-eval root branch (ATOM x) = evalAtom root branch x
-eval root branch (COND x) = evalCond root branch x
-eval root branch (IF x y z) = evalIf root branch x y z
-eval root branch (QUOTE x) = evalQuote root branch x
-eval root branch (DEFINE x y) = evalDefine root branch x y
-eval root branch (LAMBDA x y) = evalLambda root branch x y
-eval root branch (PLUS x) = evalPlus root branch x
-eval root branch (MINUS x) = evalMinus root branch x
-eval root branch (MULT x) = evalMult root branch x
-eval root branch (DIV x y) = evalDiv root branch x y
-eval root branch (MOD x y) = evalMod root branch x y
-eval root branch (LESS x y) = evalLess root branch x y
-eval root branch (GREATER x y) = evalGreater root branch x y
+eval env ctx (CAR x) = evalCar env ctx x
+eval env ctx (CDR x) = evalCdr env ctx x
+eval env ctx (CONS x y) = evalCons env ctx x y
+eval env ctx (EQQ x y) = evalEq env ctx x y
+eval env ctx (ATOM x) = evalAtom env ctx x
+eval env ctx (COND x) = evalCond env ctx x
+eval env ctx (IF x y z) = evalIf env ctx x y z
+eval env ctx (QUOTE x) = evalQuote env ctx x
+eval env ctx (DEFINE x y) = evalDefine env ctx x y
+eval env ctx (PLUS x) = evalPlus env ctx x
+eval env ctx (MINUS x) = evalMinus env ctx x
+eval env ctx (MULT x) = evalMult env ctx x
+eval env ctx (DIV x y) = evalDiv env ctx x y
+eval env ctx (MOD x y) = evalMod env ctx x y
+eval env ctx (LESS x y) = evalLess env ctx x y
+eval env ctx (GREATER x y) = evalGreater env ctx x y
 -- evaluation of non built-in functions
-eval root branch (Pair f x) = do
-  (root', branch', f') <- eval root branch f
+eval env ctx (Pair f x) = do
+  (env', ctx', f') <- eval env ctx f
   case f' of
-    Func args body -> do
-      (_, _, x') <- evalList root branch x
-      (_, b, y) <- eval root' (bind args x' (Map.empty:branch')) body
-      return (root, b, y)
+    Lambda args body -> do
+      (_, _, x') <- evalList env ctx x
+      (_, ctx'', y) <- eval env' (bindCtx args x' (Map.empty:ctx')) body
+      return (env, ctx'', y)
     _ -> runtimeError $ "Unknown expression"
 -- evaluation of other cases
 eval _ _ _ = runtimeError $ "Unknown expression"
 
 -- evaluate all elements in a list
-evalList :: LocalEnv -> Env -> SExpr -> Effect (LocalEnv, Env, [SExpr])
-evalList root branch Nil = return (root, branch, [])
-evalList root branch (Pair x xs) = do
-  (_, _, x') <- eval root branch x
-  (_, _, xs') <- evalList root branch xs
-  return (root, branch, x':xs')
+evalList :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, [SExpr])
+evalList env ctx Nil = return (env, ctx, [])
+evalList env ctx (Pair x xs) = do
+  (_, _, x') <- eval env ctx x
+  (_, _, xs') <- evalList env ctx xs
+  return (env, ctx, x':xs')

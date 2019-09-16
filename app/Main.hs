@@ -27,7 +27,7 @@ getInput str lines = do
     open = length $ filter (\x -> x == '(') str
 
 -- read-eval-print-loop for terminal
-repl :: LocalEnv -> InputT IO ()
+repl :: Env -> InputT IO ()
 repl env = do
   input <- getInput "" 0
   case input of
@@ -45,7 +45,7 @@ repl env = do
       _ -> repl env
 
 -- read-eval-print-loop for files
-repl' :: (LocalEnv, String) -> IO ()
+repl' :: (Env, String) -> IO ()
 repl' (env, s) = case dropWhile (`elem` " \t\n") s of
   [] -> return ()
   _ -> case reads s :: [(AST, String)] of
