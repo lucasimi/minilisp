@@ -19,12 +19,16 @@ getInput str lines = do
     Nothing -> getInput "" 0
     Just str' -> case isBlank str' of
       True -> getInput str lines
-      False -> case reads (str ++ " " ++ str') :: [(AST, String)] of
-        [(s, s')] -> case dropLeadingBlanks s' == "" of
-          True -> liftIO $ return $ str ++ " " ++ str'
-          False -> getInput (str ++ " " ++ str') (lines + 1)
+      False -> case isAdmitted (str ++ " " ++ str') of
+        False -> getInput str lines
+        True -> case reads (str ++ " " ++ str') :: [(AST, String)] of
+          [(s, s')] -> case dropLeadingBlanks s' == "" of
+            True -> liftIO $ return $ str ++ " " ++ str'
+            False -> getInput (str ++ " " ++ str') (lines + 1)
+          _ -> getInput (str ++ " " ++ str') (lines + 1)
   where
     open = length $ filter (\x -> x == '(') str
+    isAdmitted str = True
 
 -- read-eval-print-loop for terminal
 repl :: Env -> InputT IO ()
