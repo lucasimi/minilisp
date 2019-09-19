@@ -264,3 +264,8 @@ evalList env ctx (Pair x xs) = do
   (_, _, x') <- eval env ctx x
   (_, _, xs') <- evalList env ctx xs
   return (env, ctx, x':xs')
+
+evalSExpr :: Env -> SExpr -> Effect (Env, SExpr)
+evalSExpr env sexpr = do
+  (env', _, result) <- eval env [] sexpr
+  return (env', result) 

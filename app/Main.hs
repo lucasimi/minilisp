@@ -11,62 +11,64 @@ import Parser
 import Interpreter
 
 -- Read input from keyboard
-getInput :: String -> Int -> InputT IO (String)
-getInput str lines = do
+readInputFragment :: String -> Int -> InputT IO (String)
+readInputFragment str lines = do
   input <- getInputLine $ "[" ++ show lines ++ "]> "
            ++ (concat $ replicate open "\t")
   case input of
-    Nothing -> getInput "" 0
+    Nothing -> do
+      liftIO $ putStrLn $ "[INFO] User input discarded"
+      readInputFragment "" 0
     Just str' -> case isBlank str' of
-      True -> getInput str lines
-      False -> case isAdmitted (str ++ " " ++ str') of
-        False -> getInput str lines
-        True -> case reads (str ++ " " ++ str') :: [(AST, String)] of
+      True -> readInputFragment str lines
+      False -> case reads (str ++ " " ++ str') :: [(AST, String)] of
           [(s, s')] -> case dropLeadingBlanks s' == "" of
             True -> liftIO $ return $ str ++ " " ++ str'
-            False -> getInput (str ++ " " ++ str') (lines + 1)
-          _ -> getInput (str ++ " " ++ str') (lines + 1)
+            False -> readInputFragment (str ++ " " ++ str') (lines + 1)
+          _ -> readInputFragment (str ++ " " ++ str') (lines + 1)
   where
     open = length $ filter (\x -> x == '(') str
-    isAdmitted str = True
+
+readInput :: InputT IO (String)
+readInput = readInputFragment "" 0
 
 -- read-eval-print-loop for terminal
-repl :: Env -> InputT IO ()
-repl env = do
-  input <- getInput "" 0
-  case input of
-    str -> case reads str :: [(AST, String)] of
-      [(s, s')] -> case dropLeadingBlanks s' == "" of
-        True -> let Effect x = eval env [] (compile s) in do
-          x' <- liftIO x
-          case x' of
-            Left e -> do
-              liftIO $ putStrLn $ "[ERROR] " ++ show e
-              repl env
-            Right (env', _, expr) -> do
-              liftIO $ putStrLn $ "=> " ++ show expr
-              repl env'
-      _ -> repl env
+readEvalPrintLoop :: Env -> InputT IO ()
+readEvalPrintLoop env = do
+  input <- readInput
+  case reads input :: [(AST, String)] of
+    [] -> readEvalPrintLoop env
+    [(expr, rest)] -> case isBlank rest of
+      False -> do
+        liftIO $ putStrLn $ "[ERROR] Unable to parse expression"
+        readEvalPrintLoop env
+      True -> let Effect effect = evalSExpr env (compile expr) in do
+        effectValue <- liftIO effect
+        case effectValue of
+          Left err -> do
+            liftIO $ putStrLn $ "[ERROR] " ++ show err
+            readEvalPrintLoop env
+          Right (env', result) -> do
+            liftIO $ putStrLn $ "=> " ++ show result
+            readEvalPrintLoop env'
 
 -- read-eval-print-loop for files
-repl' :: (Env, String) -> IO ()
-repl' (env, s) = case dropWhile (`elem` " \t\n") s of
+readEvalLoop :: (Env, String) -> IO ()
+readEvalLoop (env, str) = case dropWhile (`elem` " \t\n") str of
   [] -> return ()
-  _ -> case reads s :: [(AST, String)] of
-    [] -> putStrLn $ "syntax error: " ++ show s
-    [(e, s')] -> case dropLeadingBlanks s' == "" of
-      True -> let Effect x = eval env [] (compile e) in do
-        x' <- liftIO x
-        case x' of
-          Left e -> do
-            liftIO $ putStrLn ("[ERROR] " ++ show e)
-            return ()
-          Right (env', _, res) -> do
-            liftIO $ putStrLn $ show res
-            case s' of
-              "" -> return ()
-              _ -> repl' (env', s')
-      False -> putStrLn $ "syntax error"
+  _ -> case reads str :: [(AST, String)] of
+    [] -> putStrLn $ "[ERROR] Syntax error: " ++ show str
+    [(expr, rest)] -> let Effect effect = evalSExpr env (compile expr) in do
+      effectValue <- liftIO effect
+      case effectValue of
+        Left err -> do
+          liftIO $ putStrLn ("[ERROR] " ++ show err)
+          return ()
+        Right (env', result) -> do
+          liftIO $ putStrLn $ show result
+          case isBlank rest of
+            True -> return ()
+            False -> readEvalLoop (env', rest)
 
 main :: IO ()
 main = do
@@ -74,7 +76,7 @@ main = do
   case args of
     [] -> do
       putStrLn "Minilisp interactive REPL environment [CTRL+c to quit]"
-      runInputT defaultSettings (repl Map.empty)
+      runInputT defaultSettings (readEvalPrintLoop Map.empty)
     [path] -> do
-      s <- readFile path
-      repl' (Map.empty, s)
+      file <- readFile path
+      readEvalLoop (Map.empty, file)
