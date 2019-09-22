@@ -7,7 +7,7 @@ import Parser
 
 testReadTokens :: IO ()
 testReadTokens = hspec $ do
-  describe "test for reading values" $ do
+  describe "test for reading tokens" $ do
 
     it "test for blanks" $ do
       let x = reads " \n\r\t" :: [(Token, String)]
@@ -43,7 +43,7 @@ testReadTokens = hspec $ do
 
 testReadTokenTrees :: IO ()
 testReadTokenTrees = hspec $ do
-  describe "test for reading ASTs" $ do
+  describe "test for reading TokenTrees" $ do
 
     it "test for blanks" $ do
       let x = reads " \r\t\n" :: [(TokenTree, String)]

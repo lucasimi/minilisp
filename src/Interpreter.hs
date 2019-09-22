@@ -49,8 +49,6 @@ instance Monad Effect where
         y' <- y
         return y'
 
-data Eval a = Eval { runEval :: Env -> Ctx -> Effect (Env, Ctx, a) }
-
 printEnv :: Env -> Effect ()
 printEnv env = Effect $ do
   putStrLn $ show env
