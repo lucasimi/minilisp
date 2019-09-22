@@ -1,8 +1,9 @@
-import TokenizerTest
+import ParserTest
+import InterpreterTest
 
 main :: IO ()
 main = do
   testReadTokens
-  testReadAST
-  testCompileAST
+  testReadTokenTrees
+  --testCompileAST
   testEvalSExpr

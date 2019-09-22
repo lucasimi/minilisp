@@ -2,8 +2,54 @@ module Interpreter where
 
 import qualified Data.Map as Map
 
+import SExpr
 import Utils
-import Parser
+
+-- error data type
+data Error = RuntimeErr String deriving Show
+
+-- environment data type, where variables are stored
+type Env = Map.Map String SExpr
+type Ctx = [Env]
+
+-- monad which wraps effectful computations (which may fail)
+data Effect a = Effect (IO (Either Error a))
+
+instance Functor Effect where
+  fmap f (Effect x) = Effect $ do
+    x' <- x
+    case x' of
+      Left err -> do
+        return $ Left err
+      Right a -> return $ Right $ f a
+
+instance Applicative Effect where
+  pure a = Effect $ return $ Right a
+
+  (Effect f) <*> (Effect x) = Effect $ do
+    x' <- x
+    case x' of
+      Left errx -> do
+        return $ Left errx
+      Right a -> do
+        f' <- f
+        case f' of
+          Left errf -> do
+            return $ Left errf
+          Right g -> return $ Right $ g a
+
+instance Monad Effect where
+  (Effect x) >>= f = Effect $ do
+    x' <- x
+    case x' of
+      Left err -> do
+        return $ Left err
+      Right a -> do
+        let Effect y = f a
+        y' <- y
+        return y'
+
+data Eval a = Eval { runEval :: Env -> Ctx -> Effect (Env, Ctx, a) }
 
 printEnv :: Env -> Effect ()
 printEnv env = Effect $ do
@@ -102,6 +148,16 @@ evalIf env ctx x y z = do
 evalQuote :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
 evalQuote env ctx x = do
   return (env, ctx, x)
+
+evalLabel :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalLabel env ctx (Symb x) y = do
+  (_, ctx', y') <- eval env ctx y
+  return (env, bindCtx [Symb x] [y'] (Map.empty:ctx'), y')
+
+evalLet :: Env -> Ctx -> SExpr -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalLet env ctx (Symb x) y z = do
+  (_, _, y') <- eval env ctx y
+  eval env (bindCtx [Symb x] [y'] (Map.empty:ctx)) z
 
 -- evaluation of "define" special form
 evalDefine :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
@@ -237,6 +293,8 @@ eval env ctx (ATOM x) = evalAtom env ctx x
 eval env ctx (COND x) = evalCond env ctx x
 eval env ctx (IF x y z) = evalIf env ctx x y z
 eval env ctx (QUOTE x) = evalQuote env ctx x
+eval env ctx (LABEL x y) = evalLabel env ctx x y
+eval env ctx (LET x y z) = evalLet env ctx x y z
 eval env ctx (DEFINE x y) = evalDefine env ctx x y
 eval env ctx (PLUS x) = evalPlus env ctx x
 eval env ctx (MINUS x) = evalMinus env ctx x
@@ -255,7 +313,7 @@ eval env ctx (Pair f x) = do
       return (env, ctx'', y)
     _ -> runtimeError $ "Unknown expression"
 -- evaluation of other cases
-eval _ _ _ = runtimeError $ "Unknown expression"
+--eval _ _ _ = runtimeError $ "Unknown expression"
 
 -- evaluate all elements in a list
 evalList :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, [SExpr])
@@ -268,4 +326,4 @@ evalList env ctx (Pair x xs) = do
 evalSExpr :: Env -> SExpr -> Effect (Env, SExpr)
 evalSExpr env sexpr = do
   (env', _, result) <- eval env [] sexpr
-  return (env', result) 
+  return (env', result)

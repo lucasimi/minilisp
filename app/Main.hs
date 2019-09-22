@@ -5,13 +5,14 @@ import System.Environment
 import System.Console.Haskeline
 import Control.Monad.IO.Class
 
-import Utils
-import Tokenizer
-import Parser
 import Interpreter
+import Parser
+import SExpr
+
+import Utils
 
 -- Read input from keyboard
-readInputFragment :: String -> Int -> InputT IO (String)
+readInputFragment :: String -> Int -> InputT IO (SExpr)
 readInputFragment str lines = do
   input <- getInputLine $ "[" ++ show lines ++ "]> "
            ++ (concat $ replicate open "\t")
@@ -21,44 +22,37 @@ readInputFragment str lines = do
       readInputFragment "" 0
     Just str' -> case isBlank str' of
       True -> readInputFragment str lines
-      False -> case reads (str ++ " " ++ str') :: [(AST, String)] of
-          [(s, s')] -> case dropLeadingBlanks s' == "" of
-            True -> liftIO $ return $ str ++ " " ++ str'
-            False -> readInputFragment (str ++ " " ++ str') (lines + 1)
-          _ -> readInputFragment (str ++ " " ++ str') (lines + 1)
+      False -> case parse (str ++ " " ++ str') of
+        Nothing -> readInputFragment (str ++ " " ++ str') (lines + 1)
+        Just expr -> liftIO $ return expr
+
   where
     open = length $ filter (\x -> x == '(') str
 
-readInput :: InputT IO (String)
+readInput :: InputT IO (SExpr)
 readInput = readInputFragment "" 0
 
 -- read-eval-print-loop for terminal
 readEvalPrintLoop :: Env -> InputT IO ()
 readEvalPrintLoop env = do
   input <- readInput
-  case reads input :: [(AST, String)] of
-    [] -> readEvalPrintLoop env
-    [(expr, rest)] -> case isBlank rest of
-      False -> do
-        liftIO $ putStrLn $ "[ERROR] Unable to parse expression"
+  let Effect effect = evalSExpr env input in do
+    effectValue <- liftIO effect
+    case effectValue of
+      Left err -> do
+        liftIO $ putStrLn $ "[ERROR] " ++ show err
         readEvalPrintLoop env
-      True -> let Effect effect = evalSExpr env (compile expr) in do
-        effectValue <- liftIO effect
-        case effectValue of
-          Left err -> do
-            liftIO $ putStrLn $ "[ERROR] " ++ show err
-            readEvalPrintLoop env
-          Right (env', result) -> do
-            liftIO $ putStrLn $ "=> " ++ show result
-            readEvalPrintLoop env'
+      Right (env', result) -> do
+        liftIO $ putStrLn $ "=> " ++ show result
+        readEvalPrintLoop env'
 
 -- read-eval-print-loop for files
 readEvalLoop :: (Env, String) -> IO ()
 readEvalLoop (env, str) = case dropWhile (`elem` " \t\n") str of
   [] -> return ()
-  _ -> case reads str :: [(AST, String)] of
-    [] -> putStrLn $ "[ERROR] Syntax error: " ++ show str
-    [(expr, rest)] -> let Effect effect = evalSExpr env (compile expr) in do
+  _ -> case parse str of
+    Nothing -> putStrLn $ "[ERROR] Syntax error: " ++ show str
+    Just expr -> let Effect effect = evalSExpr env expr in do
       effectValue <- liftIO effect
       case effectValue of
         Left err -> do
@@ -66,9 +60,6 @@ readEvalLoop (env, str) = case dropWhile (`elem` " \t\n") str of
           return ()
         Right (env', result) -> do
           liftIO $ putStrLn $ show result
-          case isBlank rest of
-            True -> return ()
-            False -> readEvalLoop (env', rest)
 
 main :: IO ()
 main = do

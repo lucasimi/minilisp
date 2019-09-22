@@ -2,61 +2,61 @@ module Parser where
 
 import qualified Data.Map as Map
 
+import SExpr
 import Utils
-import Tokenizer
 
--- environment data type, where variables are stored
-type Env = Map.Map String SExpr
-type Ctx = [Env]
+-- all admitted types for primitive type
+data Token = IntegerType Integer
+           | DoubleType Double
+           | BoolType Bool
+           | StringType String
+           | SymbType String
+           deriving (Show, Eq)
 
--- S-Expression data type
-data SExpr = Nil
-           | T
-           | F
-           | Integer Integer
-           | Double Double
-           | String String
-           | Symb String
-           | Pair SExpr SExpr
-           | Lambda [SExpr] SExpr
-           | CAR SExpr
-           | CDR SExpr
-           | CONS SExpr SExpr
-           | ATOM SExpr
-           | EQQ SExpr SExpr
-           | QUOTE SExpr
-           | COND [(SExpr, SExpr)]
-           | IF SExpr SExpr SExpr
-           | LABEL SExpr SExpr
-           | DEFINE SExpr SExpr
-           | PLUS [SExpr]
-           | MINUS [SExpr]
-           | MULT [SExpr]
-           | DIV SExpr SExpr
-           | MOD SExpr SExpr
-           | LESS SExpr SExpr
-           | GREATER SExpr SExpr
-           deriving Eq
+instance Read Token where
+  readsPrec _ str = case dropLeadingBlanks str of
+    "" -> []
+    '(':_ -> []
+    ')':_ -> []
+    '.':_ -> []
+    str' -> case reads str' :: [(String, String)] of
+      [(x, s)] -> [(StringType x, s)]
+      _ -> case reads str' :: [(Integer, String)] of
+        [(x, s)] -> [(IntegerType x, s)]
+        _ -> case reads str' :: [(Double, String)] of
+          [(x, s)] -> [(DoubleType x, s)]
+          _ -> case split str' of
+            ("#t", s) -> [(BoolType True, s)]
+            ("#f", s) -> [(BoolType False, s)]
+            (str'', s) -> [(SymbType str'', s)]
 
-instance Show SExpr where
-  show Nil = "()"
-  show T = "#t"
-  show F = "#f"
-  show (Integer x) = show x
-  show (Double x) = show x
-  show (String x) = show x
-  show (Symb x) = x
-  show (Pair x Nil) = "(" ++ show x ++ ")"
-  show (Pair x y) = case isList (Pair x y) of
-    True -> "(" ++ show x ++ " " ++ (tail $ show y)
-    False -> "(" ++ show x ++ " . " ++ show y ++ ")"
-    where isList Nil = True
-          isList (Pair x y) = isList y
-          isList _ = False
-  show (Lambda _ _) = "<function>"
-  show _ = "<unevaluated>"
+data TokenTree = Empty
+               | Leaf Token
+               | Node TokenTree TokenTree deriving (Show, Eq)
 
-compile :: AST -> SExpr
+instance Read TokenTree where
+  readsPrec _ str = case dropLeadingBlanks str of
+    "" -> []
+    ')':_ -> []
+    '.':_ -> []
+    '(':str' -> case dropLeadingBlanks str' of
+      ')':str'' -> [(Empty, str'')]
+      _ -> case reads str' :: [(TokenTree, String)] of
+        [(x, str'')] -> case dropLeadingBlanks str'' of
+          "" -> []
+          ')':str''' -> [(Node x Empty, str''')]
+          '.':str''' -> case reads ('(':str''') :: [(TokenTree, String)] of
+            [(Node y Empty, str'''')] -> [(Node x y, str'''')]
+            _ -> []
+          _ -> case reads ('(':str'') :: [(TokenTree, String)] of
+            [(y, str''')] -> [(Node x y, str''')]
+            _ -> []
+        _ -> []
+    _ -> case reads str :: [(Token, String)] of
+      [(x, str')] -> [(Leaf x, str')]
+      _ -> []
+
+compile :: TokenTree -> SExpr
 compile Empty = Nil
 
 compile (Leaf (BoolType True)) = T
@@ -76,6 +76,7 @@ compile (Node (Leaf (SymbType "cond")) x) = COND (compileCoupleList x)
 compile (Node (Leaf (SymbType "if")) (Node x (Node y (Node z Empty)))) = IF (compile x) (compile y) (compile z)
 compile (Node (Leaf (SymbType "lambda")) (Node x (Node y Empty))) = Lambda (compileList x) (compile y)
 compile (Node (Leaf (SymbType "label")) (Node x (Node y Empty))) = LABEL (compile x) (compile y)
+compile (Node (Leaf (SymbType "let")) (Node x (Node y (Node z Empty)))) = LET (compile x) (compile y) (compile z)
 compile (Node (Leaf (SymbType "define")) (Node x (Node y Empty))) = DEFINE (compile x) (compile y)
 compile (Node (Leaf (SymbType "+")) x) = PLUS (compileList x)
 compile (Node (Leaf (SymbType "*")) x) = MULT (compileList x)
@@ -87,10 +88,17 @@ compile (Node (Leaf (SymbType ">")) (Node x (Node y Empty))) = GREATER (compile 
 
 compile (Node x y) = Pair (compile x) (compile y)
 
-compileList :: AST -> [SExpr]
+compileList :: TokenTree -> [SExpr]
 compileList Empty = []
 compileList (Node x y) = (compile x):(compileList y)
 
-compileCoupleList :: AST -> [(SExpr, SExpr)]
+compileCoupleList :: TokenTree -> [(SExpr, SExpr)]
 compileCoupleList Empty = []
 compileCoupleList (Node (Node x (Node y Empty)) z) = (compile x, compile y):(compileCoupleList z)
+
+parse :: String -> Maybe SExpr
+parse str = case reads str :: [(TokenTree, String)] of
+  [(tree, str')] -> case isBlank str' of
+    True -> Just $ compile tree
+    False -> Nothing
+  _ -> Nothing

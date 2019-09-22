@@ -1,9 +1,9 @@
-module TokenizerTest where
+module ParserTest where
 
 import Test.Hspec
 import Control.Monad.IO.Class
 
-import Tokenizer
+import Parser
 
 testReadTokens :: IO ()
 testReadTokens = hspec $ do
@@ -41,24 +41,24 @@ testReadTokens = hspec $ do
       let x = reads ". asd" :: [(Token, String)]
       x `shouldBe` []
 
-testReadAST :: IO ()
-testReadAST = hspec $ do
+testReadTokenTrees :: IO ()
+testReadTokenTrees = hspec $ do
   describe "test for reading ASTs" $ do
 
     it "test for blanks" $ do
-      let x = reads " \r\t\n" :: [(AST, String)]
+      let x = reads " \r\t\n" :: [(TokenTree, String)]
       x `shouldBe` []
 
     it "test for Empty #1" $ do
-      let x = reads " ()asd" :: [(AST, String)]
+      let x = reads " ()asd" :: [(TokenTree, String)]
       x `shouldBe` [(Empty, "asd")]
 
     it "test for Leaf #1" $ do
-      let x = reads " 45asd" :: [(AST, String)]
+      let x = reads " 45asd" :: [(TokenTree, String)]
       x `shouldBe` [(Leaf (IntegerType 45), "asd")]
 
     it "test for Node #1" $ do
-      let x = reads "( 45 . 56.0) asd" :: [(AST, String)]
+      let x = reads "( 45 . 56.0) asd" :: [(TokenTree, String)]
       x `shouldBe` [(Node (Leaf (IntegerType 45)) (Leaf (DoubleType 56.0)), " asd")]
 {--
 testReadVal :: IO ()
