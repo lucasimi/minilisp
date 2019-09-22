@@ -5,5 +5,7 @@ main :: IO ()
 main = do
   testReadTokens
   testReadTokenTrees
-  --testCompileAST
-  testEvalSExpr
+  testEvalAtoms
+  testEvalBuiltIn
+  testEvalMacros
+  testEvalLogic

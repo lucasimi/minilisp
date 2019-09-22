@@ -85,6 +85,9 @@ compile (Node (Leaf (SymbType "/")) (Node x (Node y Empty))) = DIV (compile x) (
 compile (Node (Leaf (SymbType "%")) (Node x (Node y Empty))) = MOD (compile x) (compile y)
 compile (Node (Leaf (SymbType "<")) (Node x (Node y Empty))) = LESS (compile x) (compile y)
 compile (Node (Leaf (SymbType ">")) (Node x (Node y Empty))) = GREATER (compile x) (compile y)
+compile (Node (Leaf (SymbType "or")) (Node x (Node y Empty))) = OR (compile x) (compile y)
+compile (Node (Leaf (SymbType "and")) (Node x (Node y Empty))) = AND (compile x) (compile y)
+compile (Node (Leaf (SymbType "not")) (Node x Empty)) = NOT (compile x)
 
 compile (Node x y) = Pair (compile x) (compile y)
 

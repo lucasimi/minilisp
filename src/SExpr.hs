@@ -8,8 +8,8 @@ data SExpr = Nil
            | Double Double
            | String String
            | Symb String
-           | Pair SExpr SExpr
            | Lambda [SExpr] SExpr
+           | Pair SExpr SExpr
            | CAR SExpr
            | CDR SExpr
            | CONS SExpr SExpr
@@ -28,6 +28,9 @@ data SExpr = Nil
            | MOD SExpr SExpr
            | LESS SExpr SExpr
            | GREATER SExpr SExpr
+           | OR SExpr SExpr
+           | AND SExpr SExpr
+           | NOT SExpr
            deriving Eq
 
 instance Show SExpr where

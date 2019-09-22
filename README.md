@@ -1,6 +1,6 @@
 # Minilisp
 
-Minilisp is a very simple Lisp-like interactive environment based on the well-known paper by John McCarty (http://www-formal.stanford.edu/jmc/recursive.pdf). Minilisp is written in Haskell and is an example of how intepreter/compiler design can be easy using functional programming.
+Minilisp is a Lisp-like interactive environment for on-the-fly function prototyping. Based on the well-known paper by John McCarthy (http://www-formal.stanford.edu/jmc/recursive.pdf) Minilisp aims to be minimal and self-contained but expandable.
 
 # Features
 

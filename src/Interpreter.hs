@@ -268,6 +268,36 @@ evalGreater env ctx x y = do
       False -> return (env, ctx, F)
     _ -> runtimeError "Type mismatch"
 
+evalOr :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalOr env ctx x y = do
+  (_, _, x') <- eval env ctx x
+  (_, _, y') <- eval env ctx y
+  case (x', y') of
+    (T, T) -> return (env, ctx, T)
+    (F, T) -> return (env, ctx, T)
+    (T, F) -> return (env, ctx, T)
+    (F, F) -> return (env, ctx, F)
+    _ -> runtimeError "Non boolean values"
+
+evalAnd :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalAnd env ctx x y = do
+  (_, _, x') <- eval env ctx x
+  (_, _, y') <- eval env ctx y
+  case (x', y') of
+    (T, T) -> return (env, ctx, T)
+    (T, F) -> return (env, ctx, F)
+    (F, T) -> return (env, ctx, F)
+    (F, F) -> return (env, ctx, F)
+    _ -> runtimeError "Non boolean values"
+
+evalNot :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
+evalNot env ctx x = do
+  (_, _, x') <- eval env ctx x
+  case x' of
+    T -> return (env, ctx, F)
+    F -> return (env, ctx, T)
+    _ -> runtimeError "Non boolean value"
+
 -- evaluation function, the core of the lisp interpreter
 eval :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
 -- evaluation of atomic values (self-evaluation)
@@ -303,6 +333,9 @@ eval env ctx (DIV x y) = evalDiv env ctx x y
 eval env ctx (MOD x y) = evalMod env ctx x y
 eval env ctx (LESS x y) = evalLess env ctx x y
 eval env ctx (GREATER x y) = evalGreater env ctx x y
+eval env ctx (AND x y) = evalAnd env ctx x y
+eval env ctx (OR x y) = evalOr env ctx x y
+eval env ctx (NOT x) = evalNot env ctx x
 -- evaluation of non built-in functions
 eval env ctx (Pair f x) = do
   (env', ctx', f') <- eval env ctx f
