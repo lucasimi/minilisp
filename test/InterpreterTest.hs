@@ -8,6 +8,7 @@ import Control.Monad.IO.Class
 
 import Utils
 import SExpr
+import Effect
 import Interpreter
 
 testEvalAtoms :: IO ()

@@ -3,56 +3,16 @@ module Interpreter where
 import qualified Data.Map as Map
 
 import SExpr
+import Effect
 import Utils
-
--- error data type
-data Error = RuntimeErr String deriving Show
 
 -- environment data type, where variables are stored
 type Env = Map.Map String SExpr
 type Ctx = [Env]
 
--- monad which wraps effectful computations (which may fail)
-data Effect a = Effect (IO (Either Error a))
-
-instance Functor Effect where
-  fmap f (Effect x) = Effect $ do
-    x' <- x
-    case x' of
-      Left err -> do
-        return $ Left err
-      Right a -> return $ Right $ f a
-
-instance Applicative Effect where
-  pure a = Effect $ return $ Right a
-
-  (Effect f) <*> (Effect x) = Effect $ do
-    x' <- x
-    case x' of
-      Left errx -> do
-        return $ Left errx
-      Right a -> do
-        f' <- f
-        case f' of
-          Left errf -> do
-            return $ Left errf
-          Right g -> return $ Right $ g a
-
-instance Monad Effect where
-  (Effect x) >>= f = Effect $ do
-    x' <- x
-    case x' of
-      Left err -> do
-        return $ Left err
-      Right a -> do
-        let Effect y = f a
-        y' <- y
-        return y'
-
-printEnv :: Env -> Effect ()
-printEnv env = Effect $ do
-  putStrLn $ show env
-  return $ Right ()
+-- returns a runtime error with specified message
+runtimeError :: String -> Effect (Env, Ctx, SExpr)
+runtimeError x = Effect $ return $ Left $ RuntimeErr x
 
 -- bind symbols to values
 bindEnv :: [SExpr] -> [SExpr] -> Env -> Env
@@ -72,9 +32,12 @@ seekCtx (Symb x) (env:envs) = case seekEnv (Symb x) env of
   Just y -> Just (env:envs, y)
   Nothing -> seekCtx (Symb x) envs
 
--- returns a runtime error with specified message
-runtimeError :: String -> Effect (Env, Ctx, SExpr)
-runtimeError x = Effect $ return $ Left $ RuntimeErr x
+evalSymb :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
+evalSymb env ctx (Symb x) = case seekCtx (Symb x) ctx of
+  Just (ctx', y) -> return (env, ctx', y)
+  Nothing -> case seekEnv (Symb x) env of
+    Just y -> return (env, [], y)
+    Nothing -> runtimeError $ "Unbound symbol " ++ show x
 
 -- evaluation of "car"
 evalCar :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
@@ -296,46 +259,8 @@ evalNot env ctx x = do
     F -> return (env, ctx, T)
     _ -> runtimeError "Non boolean value"
 
--- evaluation function, the core of the lisp interpreter
-eval :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
--- evaluation of atomic values (self-evaluation)
-eval env ctx Nil = return (env, ctx, Nil)
-eval env ctx T = return (env, ctx, T)
-eval env ctx F = return (env, ctx, F)
-eval env ctx (Integer x) = return (env, ctx, Integer x)
-eval env ctx (Double x) = return (env, ctx, Double x)
-eval env ctx (String x) = return (env, ctx, String x)
-eval env ctx (Lambda x y) = return (env, ctx, Lambda x y)
--- evaluation of symbols (lookup)
-eval env ctx (Symb x) = case seekCtx (Symb x) ctx of
-  Just (ctx', y) -> return (env, ctx', y)
-  Nothing -> case seekEnv (Symb x) env of
-    Just y -> return (env, [], y)
-    Nothing -> runtimeError $ "Unbound symbol " ++ show x
--- evaluation of built-in functions (function application) and special forms (custom evaluation)
-eval env ctx (CAR x) = evalCar env ctx x
-eval env ctx (CDR x) = evalCdr env ctx x
-eval env ctx (CONS x y) = evalCons env ctx x y
-eval env ctx (EQQ x y) = evalEq env ctx x y
-eval env ctx (ATOM x) = evalAtom env ctx x
-eval env ctx (COND x) = evalCond env ctx x
-eval env ctx (IF x y z) = evalIf env ctx x y z
-eval env ctx (QUOTE x) = evalQuote env ctx x
-eval env ctx (LABEL x y) = evalLabel env ctx x y
-eval env ctx (LET x y z) = evalLet env ctx x y z
-eval env ctx (DEFINE x y) = evalDefine env ctx x y
-eval env ctx (PLUS x) = evalPlus env ctx x
-eval env ctx (MINUS x) = evalMinus env ctx x
-eval env ctx (MULT x) = evalMult env ctx x
-eval env ctx (DIV x y) = evalDiv env ctx x y
-eval env ctx (MOD x y) = evalMod env ctx x y
-eval env ctx (LESS x y) = evalLess env ctx x y
-eval env ctx (GREATER x y) = evalGreater env ctx x y
-eval env ctx (AND x y) = evalAnd env ctx x y
-eval env ctx (OR x y) = evalOr env ctx x y
-eval env ctx (NOT x) = evalNot env ctx x
--- evaluation of non built-in functions
-eval env ctx (Pair f x) = do
+evalPair :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
+evalPair env ctx f x = do
   (env', ctx', f') <- eval env ctx f
   case f' of
     Lambda args body -> do
@@ -343,8 +268,41 @@ eval env ctx (Pair f x) = do
       (_, ctx'', y) <- eval env' (bindCtx args x' (Map.empty:ctx')) body
       return (env, ctx'', y)
     _ -> runtimeError $ "Unknown expression"
--- evaluation of other cases
---eval _ _ _ = runtimeError $ "Unknown expression"
+
+-- evaluation function, the core of the lisp interpreter
+eval :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
+-- evaluation of atomic values (self-evaluation)
+eval env ctx expr = case expr of
+  Nil -> return (env, ctx, Nil)
+  T -> return (env, ctx, T)
+  F -> return (env, ctx, F)
+  Integer x -> return (env, ctx, Integer x)
+  Double x -> return (env, ctx, Double x)
+  String x -> return (env, ctx, String x)
+  Lambda x y -> return (env, ctx, Lambda x y)
+  Symb x -> evalSymb env ctx (Symb x)
+  CAR x -> evalCar env ctx x
+  CDR x -> evalCdr env ctx x
+  CONS x y -> evalCons env ctx x y
+  EQQ x y -> evalEq env ctx x y
+  ATOM x -> evalAtom env ctx x
+  COND x -> evalCond env ctx x
+  IF x y z -> evalIf env ctx x y z
+  QUOTE x -> evalQuote env ctx x
+  LABEL x y -> evalLabel env ctx x y
+  LET x y z -> evalLet env ctx x y z
+  DEFINE x y -> evalDefine env ctx x y
+  PLUS x -> evalPlus env ctx x
+  MINUS x -> evalMinus env ctx x
+  MULT x -> evalMult env ctx x
+  DIV x y -> evalDiv env ctx x y
+  MOD x y -> evalMod env ctx x y
+  LESS x y -> evalLess env ctx x y
+  GREATER x y -> evalGreater env ctx x y
+  AND x y -> evalAnd env ctx x y
+  OR x y -> evalOr env ctx x y
+  NOT x -> evalNot env ctx x
+  Pair f x -> evalPair env ctx f x
 
 -- evaluate all elements in a list
 evalList :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, [SExpr])
