@@ -11,8 +11,8 @@ type Env = Map.Map String SExpr
 type Ctx = [Env]
 
 -- returns a runtime error with specified message
-runtimeError :: String -> Effect (Env, Ctx, SExpr)
-runtimeError x = Effect $ return $ Left $ RuntimeErr x
+throwError :: Error -> Effect (Env, Ctx, SExpr)
+throwError err = Effect $ return $ Left err
 
 -- bind symbols to values
 bindEnv :: [SExpr] -> [SExpr] -> Env -> Env
@@ -37,7 +37,7 @@ evalSymb env ctx (Symb x) = case seekCtx (Symb x) ctx of
   Just (ctx', y) -> return (env, ctx', y)
   Nothing -> case seekEnv (Symb x) env of
     Just y -> return (env, [], y)
-    Nothing -> runtimeError $ "Unbound symbol " ++ show x
+    Nothing -> throwError $ UnboundSymbolError x
 
 -- evaluation of "car"
 evalCar :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
@@ -45,6 +45,7 @@ evalCar env ctx x = do
   (_, _, x') <- eval env ctx x
   case x' of
     Pair a _ -> return (env, ctx, a)
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "cdr"
 evalCdr :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
@@ -52,6 +53,7 @@ evalCdr env ctx x = do
   (_, _, x') <- eval env ctx x
   case x' of
     Pair _ b -> return (env, ctx, b)
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "cons"
 evalCons :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
@@ -66,6 +68,9 @@ evalEq env ctx x y = do
   (_, _, x') <- eval env ctx x
   (_, _, y') <- eval env ctx y
   case (x', y') of
+    (Nil, Nil) -> return (env, ctx, T)
+    (T, T) -> return (env, ctx, T)
+    (F, F) -> return (env, ctx, T)
     (Integer a, Integer b) -> case a == b of
       True -> return (env, ctx, T)
       False -> return (env, ctx, F)
@@ -83,6 +88,8 @@ evalAtom env ctx x = do
   (_, _, x') <- eval env ctx x
   case x' of
     Nil -> return (env, ctx, T)
+    T -> return (env, ctx, T)
+    F -> return (env, ctx, T)
     Integer _ -> return (env, ctx, T)
     Double _ -> return (env, ctx, T)
     String _ -> return (env, ctx, T)
@@ -95,7 +102,7 @@ evalCond env ctx ((x, y):xs) = do
   case x' of
     T -> eval env ctx y
     F -> evalCond env ctx xs
-    _ -> runtimeError "Non boolean value as conditional"
+    _ -> throwError $ UnexpectedValueError x'
 
 evalIf :: Env -> Ctx -> SExpr -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalIf env ctx x y z = do
@@ -103,12 +110,11 @@ evalIf env ctx x y z = do
   case x' of
     T -> eval env ctx y
     F -> eval env ctx z
-    _ -> runtimeError "Non boolean value as conditional"
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "quote" special form
 evalQuote :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
-evalQuote env ctx x = do
-  return (env, ctx, x)
+evalQuote env ctx x = return (env, ctx, x)
 
 evalLabel :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalLabel env ctx (Symb x) y = do
@@ -133,14 +139,21 @@ evalPlus env ctx [x] = do
   case x' of
     Integer a -> return (env, ctx, x')
     Double a -> return (env, ctx, x')
-    _ -> runtimeError $ "Non numerical value " ++ show x'
+    _ -> throwError $ UnexpectedValueError x'
 evalPlus env ctx (x:xs) = do
-  (_, _, xs') <- evalPlus env ctx xs
   (_, _, x') <- eval env ctx x
-  case (x', xs') of
-    (Integer a, Integer b) -> return (env, ctx, Integer (a + b))
-    (Double a, Double b) -> return (env, ctx, Double (a + b))
-    _ -> runtimeError "Numeric type mismatch"
+  case x' of
+    Integer a -> do
+      (_, _, xs') <- evalPlus env ctx xs
+      case xs' of
+        Integer b -> return (env, ctx, Integer $ a + b)
+        _ -> throwError $ UnexpectedValueError xs'
+    Double a -> do
+      (_, _, xs') <- evalPlus env ctx xs
+      case xs' of
+        Double b -> return (env, ctx, Double $ a + b)
+        _ -> throwError $ UnexpectedValueError xs'
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "-"
 evalMinus :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
@@ -149,15 +162,22 @@ evalMinus env ctx [x] = do
   case x' of
     Integer a -> return (env, ctx, Integer (-a))
     Double a -> return (env, ctx, Double (-a))
-    _ -> runtimeError "Type mismatch"
+    _ -> throwError $ UnexpectedValueError x'
 evalMinus env ctx [x, y] = do
   (_, _, x') <- eval env ctx x
-  (_, _, y') <- eval env ctx y
-  case (x', y') of
-    (Integer a, Integer b) -> return (env, ctx, Integer (a - b))
-    (Double a, Double b) -> return (env, ctx, Double (a - b))
-    _ -> runtimeError "Type mismatch"
-evalMinus _ _ _ = runtimeError "Wrong number of arguments"
+  case x' of
+    Integer a -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        Integer b -> return (env, ctx, Integer $ a - b)
+        _ -> throwError $ UnexpectedValueError y'
+    Double a -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        Double b -> return (env, ctx, Double $ a - b)
+        _ -> throwError $ UnexpectedValueError y'
+    _ -> throwError $ UnexpectedValueError x'
+evalMinus _ _ _ = throwError $ UnexpectedArgNumError 2
 
 -- evaluation of "*"
 evalMult :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
@@ -166,90 +186,121 @@ evalMult env ctx [x] = do
   case x' of
     Integer a -> return (env, ctx, x')
     Double a -> return (env, ctx, x')
-    _ -> runtimeError $ "Non numerical value " ++ show x'
+    _ -> throwError $ UnexpectedValueError x'
 evalMult env ctx (x:xs) = do
-  (_, _, xs') <- evalMult env ctx xs
   (_, _, x') <- eval env ctx x
-  case (x', xs') of
-    (Integer a, Integer b) -> return (env, ctx, Integer (a * b))
-    (Double a, Double b) -> return (env, ctx, Double (a * b))
-    _ -> runtimeError "Type mismatch"
+  case x' of
+    Integer a -> do
+      (_, _, xs') <- evalMult env ctx xs
+      case xs' of
+        Integer b -> return (env, ctx, Integer $ a * b)
+        _ -> throwError $ UnexpectedValueError xs'
+    Double a -> do
+      (_, _, xs') <- evalMult env ctx xs
+      case xs' of
+        Double b -> return (env, ctx, Double $ a * b)
+        _ -> throwError $ UnexpectedValueError xs'
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "/"
 evalDiv :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalDiv env ctx x y = do
   (_, _, y') <- eval env ctx y
   case y' of
-    Integer 0 -> runtimeError "Division by 0"
-    Double 0.0 -> runtimeError "Division by 0.0"
-    _ -> do
+    Integer 0 -> throwError DivisionByZeroError
+    Integer b -> do
       (_, _, x') <- eval env ctx x
-      case (x', y') of
-        (Integer a,Integer b) -> return (env, ctx, Integer (a `div` b))
-        (Double a, Double b) -> return (env, ctx, Double (a / b))
-        _ -> runtimeError $ "Type mismatch"
+      case x' of
+        Integer a -> return (env, ctx, Integer (a `div` b))
+        _ -> throwError $ UnexpectedValueError x'
+    Double 0.0 -> throwError DivisionByZeroError
+    Double b -> do
+      (_, _, x') <- eval env ctx x
+      case x' of
+        Double a -> return (env, ctx, Double (a / b))
+        _ -> throwError $ UnexpectedValueError x'
+    _ -> throwError $ UnexpectedValueError y'
 
 -- evaluation of "%"
 evalMod :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalMod env ctx x y = do
   (_, _, y') <- eval env ctx y
   case y' of
-    Integer 0 -> runtimeError "Division by 0"
-    _ -> do
+    Integer 0 -> throwError DivisionByZeroError
+    Integer b -> do
       (_, _, x') <- eval env ctx x
-      case (x', y') of
-        (Integer a, Integer b) -> return (env, ctx, Integer (a `mod` b))
-        _ -> runtimeError $ "Type mismatch"
+      case x' of
+        Integer a -> return (env, ctx, Integer $ a `mod` b)
+        _ -> throwError $ UnexpectedValueError x'
+    _ -> throwError $ UnexpectedValueError y'
 
 -- evaluation of "<"
 evalLess :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalLess env ctx x y = do
   (_, _, x') <- eval env ctx x
-  (_, _, y') <- eval env ctx y
-  case (x', y') of
-    (Integer a, Integer b) -> case a < b of
-      True -> return (env, ctx, T)
-      False -> return (env, ctx, F)
-    (Double a, Double b) -> case a < b of
-      True -> return (env, ctx, T)
-      False -> return (env, ctx, F)
-    _ -> runtimeError "Type mismatch"
+  case x' of
+    Integer a -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        Integer b -> case a < b of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        _ -> throwError $ UnexpectedValueError y'
+    Double a -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        Double b -> case a < b of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        _ -> throwError $ UnexpectedValueError y'
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of ">"
 evalGreater :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalGreater env ctx x y = do
   (_, _, x') <- eval env ctx x
-  (_, _, y') <- eval env ctx y
-  case (x', y') of
-    (Integer a, Integer b) -> case a > b of
-      True -> return (env, ctx, T)
-      False -> return (env, ctx, F)
-    (Double a, Double b) -> case a > b of
-      True -> return (env, ctx, T)
-      False -> return (env, ctx, F)
-    _ -> runtimeError "Type mismatch"
+  case x' of
+    Integer a -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        Integer b -> case a > b of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        _ -> throwError $ UnexpectedValueError y'
+    Double a -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        Double b -> case a > b of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        _ -> throwError $ UnexpectedValueError y'
+    _ -> throwError $ UnexpectedValueError x'
 
 evalOr :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalOr env ctx x y = do
   (_, _, x') <- eval env ctx x
-  (_, _, y') <- eval env ctx y
-  case (x', y') of
-    (T, T) -> return (env, ctx, T)
-    (F, T) -> return (env, ctx, T)
-    (T, F) -> return (env, ctx, T)
-    (F, F) -> return (env, ctx, F)
-    _ -> runtimeError "Non boolean values"
+  case x' of
+    T -> return (env, ctx, T)
+    F -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        T -> return (env, ctx, T)
+        F -> return (env, ctx, F)
+        _ -> throwError $ UnexpectedValueError y'
+    _ -> throwError $ UnexpectedValueError x'
 
 evalAnd :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalAnd env ctx x y = do
   (_, _, x') <- eval env ctx x
-  (_, _, y') <- eval env ctx y
-  case (x', y') of
-    (T, T) -> return (env, ctx, T)
-    (T, F) -> return (env, ctx, F)
-    (F, T) -> return (env, ctx, F)
-    (F, F) -> return (env, ctx, F)
-    _ -> runtimeError "Non boolean values"
+  case x' of
+    F -> return (env, ctx, F)
+    T -> do
+      (_, _, y') <- eval env ctx y
+      case y' of
+        F -> return (env, ctx, F)
+        T -> return (env, ctx, T)
+        _ -> throwError $ UnexpectedValueError y'
+    _ -> throwError $ UnexpectedValueError x'
 
 evalNot :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
 evalNot env ctx x = do
@@ -257,7 +308,7 @@ evalNot env ctx x = do
   case x' of
     T -> return (env, ctx, F)
     F -> return (env, ctx, T)
-    _ -> runtimeError "Non boolean value"
+    _ -> throwError $ UnexpectedValueError x'
 
 evalPair :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalPair env ctx f x = do
@@ -267,7 +318,7 @@ evalPair env ctx f x = do
       (_, _, x') <- evalList env ctx x
       (_, ctx'', y) <- eval env' (bindCtx args x' (Map.empty:ctx')) body
       return (env, ctx'', y)
-    _ -> runtimeError $ "Unknown expression"
+    _ -> throwError $ UnexpectedExpressionError f'
 
 -- evaluation function, the core of the lisp interpreter
 eval :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)

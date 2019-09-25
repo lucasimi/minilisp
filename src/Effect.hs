@@ -1,7 +1,15 @@
 module Effect where
 
+import SExpr
+
 -- error data type
-data Error = RuntimeErr String deriving Show
+data Error = RuntimeError String
+           | UnexpectedArgNumError Integer
+           | UnexpectedValueError SExpr
+           | UnboundSymbolError String
+           | DivisionByZeroError
+           | UnexpectedExpressionError SExpr
+           deriving Show
 
 -- monad which wraps effectful computations (which may fail)
 data Effect a = Effect (IO (Either Error a))
