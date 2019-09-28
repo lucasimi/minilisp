@@ -9,3 +9,4 @@ main = do
   testEvalBuiltIn
   testEvalMacros
   testEvalLogic
+  testEvalMath

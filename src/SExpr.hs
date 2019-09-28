@@ -24,12 +24,12 @@ data SExpr = Nil
            | PLUS [SExpr]
            | MINUS [SExpr]
            | MULT [SExpr]
-           | DIV SExpr SExpr
+           | DIV [SExpr]
            | MOD SExpr SExpr
-           | LESS SExpr SExpr
-           | GREATER SExpr SExpr
-           | OR SExpr SExpr
-           | AND SExpr SExpr
+           | LESS [SExpr]
+           | GREATER [SExpr]
+           | OR [SExpr]
+           | AND [SExpr]
            | NOT SExpr
            deriving Eq
 

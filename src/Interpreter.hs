@@ -3,8 +3,53 @@ module Interpreter where
 import qualified Data.Map as Map
 
 import SExpr
-import Effect
 import Utils
+
+-- error data type
+data Error = RuntimeError String
+           | UnexpectedArgNumError Integer
+           | UnexpectedValueError SExpr
+           | UnboundSymbolError String
+           | DivisionByZeroError
+           | UnexpectedExpressionError SExpr
+           deriving Show
+
+-- monad which wraps effectful computations (which may fail)
+data Effect a = Effect (IO (Either Error a))
+
+instance Functor Effect where
+  fmap f (Effect x) = Effect $ do
+    x' <- x
+    case x' of
+      Left err -> do
+        return $ Left err
+      Right a -> return $ Right $ f a
+
+instance Applicative Effect where
+  pure a = Effect $ return $ Right a
+
+  (Effect f) <*> (Effect x) = Effect $ do
+    x' <- x
+    case x' of
+      Left errx -> do
+        return $ Left errx
+      Right a -> do
+        f' <- f
+        case f' of
+          Left errf -> do
+            return $ Left errf
+          Right g -> return $ Right $ g a
+
+instance Monad Effect where
+  (Effect x) >>= f = Effect $ do
+    x' <- x
+    case x' of
+      Left err -> do
+        return $ Left err
+      Right a -> do
+        let Effect y = f a
+        y' <- y
+        return y'
 
 -- environment data type, where variables are stored
 type Env = Map.Map String SExpr
@@ -134,172 +179,151 @@ evalDefine env ctx (Symb x) y = do
 
 -- evaluation of "+"
 evalPlus :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
-evalPlus env ctx [x] = do
-  (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> return (env, ctx, x')
-    Double a -> return (env, ctx, x')
-    _ -> throwError $ UnexpectedValueError x'
+evalPlus env ctx [] = return (env, ctx, Integer 0)
 evalPlus env ctx (x:xs) = do
   (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> do
-      (_, _, xs') <- evalPlus env ctx xs
-      case xs' of
-        Integer b -> return (env, ctx, Integer $ a + b)
-        _ -> throwError $ UnexpectedValueError xs'
-    Double a -> do
-      (_, _, xs') <- evalPlus env ctx xs
-      case xs' of
-        Double b -> return (env, ctx, Double $ a + b)
-        _ -> throwError $ UnexpectedValueError xs'
+  (_, _, xs') <- evalPlus env ctx xs
+  case (x', xs') of
+    (Integer a, Integer b) -> return (env, ctx, Integer $ a + b)
+    (Integer a, Double b) -> return (env, ctx, Double $ (fromInteger a) + b)
+    (Integer _, _) -> throwError $ UnexpectedValueError xs'
+    (Double a, Integer b) -> return (env, ctx, Double $ a + (fromInteger b))
+    (Double a, Double b) -> return (env, ctx, Double $ a + b)
+    (Double _, _) -> throwError $ UnexpectedValueError xs'
     _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "-"
 evalMinus :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
-evalMinus env ctx [x] = do
+evalMinus env ctx [] = return (env, ctx, Integer 0)
+evalMinus env ctx [x] = evalMinus env ctx [Integer 0, x]
+evalMinus env ctx (x:xs) = do
   (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> return (env, ctx, Integer (-a))
-    Double a -> return (env, ctx, Double (-a))
+  (_, _, xs') <- evalPlus env ctx xs
+  case (x', xs') of
+    (Integer a, Integer b) -> return (env, ctx, Integer $ a - b)
+    (Integer a, Double b) -> return (env, ctx, Double $ (fromInteger a) - b)
+    (Integer _, _) -> throwError $ UnexpectedValueError xs'
+    (Double a, Integer b) -> return (env, ctx, Double $ a - (fromInteger b))
+    (Double a, Double b) -> return (env, ctx, Double $ a - b)
+    (Double _, _) -> throwError $ UnexpectedValueError xs'
     _ -> throwError $ UnexpectedValueError x'
-evalMinus env ctx [x, y] = do
-  (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> do
-      (_, _, y') <- eval env ctx y
-      case y' of
-        Integer b -> return (env, ctx, Integer $ a - b)
-        _ -> throwError $ UnexpectedValueError y'
-    Double a -> do
-      (_, _, y') <- eval env ctx y
-      case y' of
-        Double b -> return (env, ctx, Double $ a - b)
-        _ -> throwError $ UnexpectedValueError y'
-    _ -> throwError $ UnexpectedValueError x'
-evalMinus _ _ _ = throwError $ UnexpectedArgNumError 2
 
 -- evaluation of "*"
 evalMult :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
-evalMult env ctx [x] = do
-  (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> return (env, ctx, x')
-    Double a -> return (env, ctx, x')
-    _ -> throwError $ UnexpectedValueError x'
+evalMult env ctx [] = return (env, ctx, Integer 1)
 evalMult env ctx (x:xs) = do
   (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> do
-      (_, _, xs') <- evalMult env ctx xs
-      case xs' of
-        Integer b -> return (env, ctx, Integer $ a * b)
-        _ -> throwError $ UnexpectedValueError xs'
-    Double a -> do
-      (_, _, xs') <- evalMult env ctx xs
-      case xs' of
-        Double b -> return (env, ctx, Double $ a * b)
-        _ -> throwError $ UnexpectedValueError xs'
+  (_, _, xs') <- evalMult env ctx xs
+  case (x', xs') of
+    (Integer a, Integer b) -> return (env, ctx, Integer $ a * b)
+    (Integer a, Double b) -> return (env, ctx, Double $ (fromInteger a) * b)
+    (Integer _, _) -> throwError $ UnexpectedValueError xs'
+    (Double a, Integer b) -> return (env, ctx, Double $ a * (fromInteger b))
+    (Double a, Double b) -> return (env, ctx, Double $ a * b)
+    (Double _, _) -> throwError $ UnexpectedValueError xs'
     _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "/"
-evalDiv :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
-evalDiv env ctx x y = do
-  (_, _, y') <- eval env ctx y
-  case y' of
-    Integer 0 -> throwError DivisionByZeroError
-    Integer b -> do
-      (_, _, x') <- eval env ctx x
-      case x' of
-        Integer a -> return (env, ctx, Integer (a `div` b))
-        _ -> throwError $ UnexpectedValueError x'
-    Double 0.0 -> throwError DivisionByZeroError
-    Double b -> do
-      (_, _, x') <- eval env ctx x
-      case x' of
-        Double a -> return (env, ctx, Double (a / b))
-        _ -> throwError $ UnexpectedValueError x'
-    _ -> throwError $ UnexpectedValueError y'
+evalDiv :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalDiv env ctx [] = return (env, ctx, Integer 1)
+evalDiv env ctx [x] = evalDiv env ctx [Integer 1, x]
+evalDiv env ctx (x:xs) = do
+  (_, _, x') <- eval env ctx x
+  (_, _, xs') <- evalMult env ctx xs
+  case (x', xs') of
+    (_, Integer 0) -> throwError DivisionByZeroError
+    (_, Double 0.0) -> throwError DivisionByZeroError
+    (Integer a, Integer b) -> return (env, ctx, Integer (div a b))
+    (Integer a, Double b) -> return (env, ctx, Double ((fromInteger a) / b))
+    (Integer _, _) -> throwError $ UnexpectedValueError xs'
+    (Double a, Integer b) -> return (env, ctx, Double (a / (fromInteger b)))
+    (Double a, Double b) -> return (env, ctx, Double (a / b))
+    (Double _, _) -> throwError $ UnexpectedValueError xs'
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "%"
 evalMod :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalMod env ctx x y = do
+  (_, _, x') <- eval env ctx x
   (_, _, y') <- eval env ctx y
-  case y' of
-    Integer 0 -> throwError DivisionByZeroError
-    Integer b -> do
-      (_, _, x') <- eval env ctx x
-      case x' of
-        Integer a -> return (env, ctx, Integer $ a `mod` b)
-        _ -> throwError $ UnexpectedValueError x'
-    _ -> throwError $ UnexpectedValueError y'
+  case (x', y') of
+    (_, Integer 0) -> throwError DivisionByZeroError
+    (Integer a, Integer b) -> return (env, ctx, Integer $ a `mod` b)
+    (Integer _, _) -> throwError $ UnexpectedValueError y'
+    _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of "<"
-evalLess :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
-evalLess env ctx x y = do
-  (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> do
+evalLess :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalLess env ctx [] = throwError $ UnexpectedArgNumError 0
+evalLess env ctx [x] = return (env, ctx, T)
+evalLess env ctx (x:y:ys) = do
+  (_, _, z) <- evalLess env ctx (y:ys)
+  case z of
+    F -> return (env, ctx, F)
+    T -> do
+      (_, _, x') <- eval env ctx x
       (_, _, y') <- eval env ctx y
-      case y' of
-        Integer b -> case a < b of
+      case (x', y') of
+        (Integer a, Integer b) -> case a < b of
           True -> return (env, ctx, T)
           False -> return (env, ctx, F)
-        _ -> throwError $ UnexpectedValueError y'
-    Double a -> do
-      (_, _, y') <- eval env ctx y
-      case y' of
-        Double b -> case a < b of
+        (Integer a, Double b) -> case (fromInteger a) < b of
           True -> return (env, ctx, T)
           False -> return (env, ctx, F)
-        _ -> throwError $ UnexpectedValueError y'
-    _ -> throwError $ UnexpectedValueError x'
+        (Integer _, _) -> throwError $ UnexpectedValueError y'
+        (Double a, Integer b) -> case a < (fromInteger b) of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        (Double a, Double b) -> case a < b of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        (Double _, _) -> throwError $ UnexpectedValueError y'
+        _ -> throwError $ UnexpectedValueError x'
 
 -- evaluation of ">"
-evalGreater :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
-evalGreater env ctx x y = do
-  (_, _, x') <- eval env ctx x
-  case x' of
-    Integer a -> do
+evalGreater :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalGreater env ctx [] = throwError $ UnexpectedArgNumError 0
+evalGreater env ctx [x] = return (env, ctx, T)
+evalGreater env ctx (x:y:ys) = do
+  (_, _, z) <- evalGreater env ctx (y:ys)
+  case z of
+    F -> return (env, ctx, F)
+    T -> do
+      (_, _, x') <- eval env ctx x
       (_, _, y') <- eval env ctx y
-      case y' of
-        Integer b -> case a > b of
+      case (x', y') of
+        (Integer a, Integer b) -> case a > b of
           True -> return (env, ctx, T)
           False -> return (env, ctx, F)
-        _ -> throwError $ UnexpectedValueError y'
-    Double a -> do
-      (_, _, y') <- eval env ctx y
-      case y' of
-        Double b -> case a > b of
+        (Integer a, Double b) -> case (fromInteger a) > b of
           True -> return (env, ctx, T)
           False -> return (env, ctx, F)
-        _ -> throwError $ UnexpectedValueError y'
-    _ -> throwError $ UnexpectedValueError x'
+        (Integer _, _) -> throwError $ UnexpectedValueError y'
+        (Double a, Integer b) -> case a > (fromInteger b) of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        (Double a, Double b) -> case a > b of
+          True -> return (env, ctx, T)
+          False -> return (env, ctx, F)
+        (Double _, _) -> throwError $ UnexpectedValueError y'
+        _ -> throwError $ UnexpectedValueError x'
 
-evalOr :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
-evalOr env ctx x y = do
+evalOr :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalOr env ctx [] = return (env, ctx, F)
+evalOr env ctx (x:xs) = do
   (_, _, x') <- eval env ctx x
   case x' of
     T -> return (env, ctx, T)
-    F -> do
-      (_, _, y') <- eval env ctx y
-      case y' of
-        T -> return (env, ctx, T)
-        F -> return (env, ctx, F)
-        _ -> throwError $ UnexpectedValueError y'
+    F -> evalOr env ctx xs
     _ -> throwError $ UnexpectedValueError x'
 
-evalAnd :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
-evalAnd env ctx x y = do
+evalAnd :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalAnd env ctx [] = return (env, ctx, T)
+evalAnd env ctx (x:xs) = do
   (_, _, x') <- eval env ctx x
   case x' of
     F -> return (env, ctx, F)
-    T -> do
-      (_, _, y') <- eval env ctx y
-      case y' of
-        F -> return (env, ctx, F)
-        T -> return (env, ctx, T)
-        _ -> throwError $ UnexpectedValueError y'
+    T -> evalAnd env ctx xs
     _ -> throwError $ UnexpectedValueError x'
 
 evalNot :: Env -> Ctx -> SExpr -> Effect (Env, Ctx, SExpr)
@@ -346,12 +370,12 @@ eval env ctx expr = case expr of
   PLUS x -> evalPlus env ctx x
   MINUS x -> evalMinus env ctx x
   MULT x -> evalMult env ctx x
-  DIV x y -> evalDiv env ctx x y
+  DIV x -> evalDiv env ctx x
   MOD x y -> evalMod env ctx x y
-  LESS x y -> evalLess env ctx x y
-  GREATER x y -> evalGreater env ctx x y
-  AND x y -> evalAnd env ctx x y
-  OR x y -> evalOr env ctx x y
+  LESS x -> evalLess env ctx x
+  GREATER x -> evalGreater env ctx x
+  AND x -> evalAnd env ctx x
+  OR x -> evalOr env ctx x
   NOT x -> evalNot env ctx x
   Pair f x -> evalPair env ctx f x
 

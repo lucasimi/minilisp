@@ -8,7 +8,6 @@ import Control.Monad.IO.Class
 import Interpreter
 import Parser
 import SExpr
-import Effect
 
 import Utils
 

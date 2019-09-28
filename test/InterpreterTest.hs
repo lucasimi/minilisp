@@ -8,7 +8,6 @@ import Control.Monad.IO.Class
 
 import Utils
 import SExpr
-import Effect
 import Interpreter
 
 testEvalAtoms :: IO ()
@@ -181,13 +180,37 @@ testEvalMath = hspec $ do
       let x = PLUS [Integer (-1), Integer 2, Integer 3]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
-      x' `shouldBe` (Integer 5)
+      x' `shouldBe` (Integer 4)
 
     it "test for + #3" $ do
       let x = PLUS [Integer 1, Integer 2]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` (Integer 3)
+
+    it "test for + #4" $ do
+      let x = PLUS [Integer 1, Double 2.0]
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Double 3.0)
+
+    it "test for + #5" $ do
+      let x = PLUS [Double 1.0, Integer 2]
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Double 3.0)
+
+    it "test for + #5" $ do
+      let x = PLUS [Double 1.0, Double 2.0]
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Double 3.0)
+
+    it "test for + #6" $ do
+      let x = PLUS []
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Integer 0)
 
     it "test for - #1" $ do
       let x = MINUS [Integer 1]
@@ -200,6 +223,24 @@ testEvalMath = hspec $ do
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` (Integer (-1))
+
+    it "test for - #3" $ do
+      let x = MINUS []
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Integer 0)
+
+    it "test for - #4" $ do
+      let x = MINUS [Integer 4, Double 1.0]
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Double 3.0)
+
+    it "test for - #5" $ do
+      let x = MINUS [Integer 4, Double 1.0, Integer 7]
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Double (-4.0))
 
     it "test for * #1" $ do
       let x = MULT [Integer 1, Integer 2, Integer 3]
@@ -214,13 +255,13 @@ testEvalMath = hspec $ do
       x' `shouldBe` (Integer 2)
 
     it "test for / #1" $ do
-      let x = DIV (Double 1.0) (Double 2.0)
+      let x = DIV [Double 1.0, Double 2.0]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` (Double 0.5)
 
     it "test for / #2" $ do
-      let x = DIV (Integer 1) (Integer 2)
+      let x = DIV [Integer 1, Integer 2]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` (Integer 0)
@@ -232,37 +273,37 @@ testEvalMath = hspec $ do
       x' `shouldBe` (Integer 1)
 
     it "test for < #1" $ do
-      let x = LESS (Integer 1) (Integer 2)
+      let x = LESS [Integer 1, Integer 2]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for < #2" $ do
-      let x = LESS (Double 1) (Double 2)
+      let x = LESS [Double 1, Double 2]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for < #1" $ do
-      let x = LESS (Integer 3) (Integer 2)
+      let x = LESS [Integer 3, Integer 2]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` F
 
     it "test for > #1" $ do
-      let x = GREATER (Integer 3) (Integer 2)
+      let x = GREATER [Integer 3, Integer 2]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for > #2" $ do
-      let x = GREATER (Double 3.0) (Double 2.0)
+      let x = GREATER [Double 3.0, Double 2.0]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for > #3" $ do
-      let x = GREATER (Integer 1) (Integer 2)
+      let x = GREATER [Integer 1, Integer 2]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` F
@@ -272,49 +313,49 @@ testEvalLogic = hspec $ do
   describe "Test for evaluating logic functions" $ do
 
     it "test for and #1" $ do
-      let x = AND T F
+      let x = AND [T, F]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` F
 
     it "test for and #2" $ do
-      let x = AND T T
+      let x = AND [T, T]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for and #3" $ do
-      let x = AND F T
+      let x = AND [F, T]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` F
 
     it "test for and #4" $ do
-      let x = AND F F
+      let x = AND [F, F]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` F
 
     it "test for or #1" $ do
-      let x = OR T F
+      let x = OR [T, F]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for or #2" $ do
-      let x = OR T T
+      let x = OR [T, T]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for or #3" $ do
-      let x = OR F T
+      let x = OR [F, T]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` T
 
     it "test for or #4" $ do
-      let x = OR F F
+      let x = OR [F, F]
       let (Effect result) = eval Map.empty [] x
       Right (env', [], x') <- result
       x' `shouldBe` F
