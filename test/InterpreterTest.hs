@@ -178,6 +178,84 @@ testEvalMacros = hspec $ do
       Right (env', [], x') <- result
       x' `shouldBe` Nil
 
+    it "test for let #1" $ do
+      let x = LET (Symb "x") (Integer 4) (Symb "x")
+      let (Effect result) = eval Map.empty [] x
+      Right (env', ctx', x') <- result
+      x' `shouldBe` (Integer 4)
+      ctx' `shouldBe` [Map.insert "x" (Integer 4) Map.empty]
+      env' `shouldBe` Map.empty
+
+    it "test for define #1" $ do
+      let x = DEFINE (Symb "x") (Integer 4)
+      let y = Symb "x"
+      let (Effect def) = eval Map.empty [] x
+      Right (env, [], x') <- def
+      let (Effect res) = eval env [] y
+      Right (env', [], y') <- res
+      x' `shouldBe` (Symb "x")
+      y' `shouldBe` (Integer 4)
+      env' `shouldBe` (Map.insert "x" (Integer 4) Map.empty)
+
+    -- (lambda (x) (+ x 1))
+    it "test for lambda #1" $ do
+      let foo = Lambda [Symb "x"] (PLUS [Symb "x", Integer 1])
+      let (Effect res) = eval Map.empty [] (Pair foo (Pair (Integer 0) Nil))
+      Right (env, ctx, x') <- res
+      x' `shouldBe` (Integer 1)
+      env `shouldBe` Map.empty
+      ctx `shouldBe` [Map.insert "x" (Integer 0) Map.empty]
+
+    -- (lambda (n) (if (eq n 0) 1 (* n (lambda (- n 1)))))
+    it "test for lambda #2" $ do
+      let lam = (Lambda [Symb "n"] (IF (EQQ (Symb "n") (Integer 0)) (Integer 1) (MULT [Symb "n", Pair (Symb "fact") (Pair (MINUS [Symb "n", Integer 1]) Nil)])))
+      let def = DEFINE (Symb "fact") lam
+      let (Effect def') = eval Map.empty [] def
+      Right (env, [], x') <- def'
+      let (Effect res) = eval env [] (Pair (Symb "fact") (Pair (Integer 5) Nil))
+      Right (env', ctx', x') <- res
+      x' `shouldBe` (Integer 120)
+      env `shouldBe` (Map.insert "fact" lam Map.empty)
+      ctx' `shouldBe` [Map.insert "n" (Integer 5) Map.empty]
+
+    -- (lambda (n) (lambda (m) (lambda () (+ n m))))
+    it "test for lambda #3" $ do
+      let lam = Lambda [Symb "n"] (Lambda [Symb "m"] (Lambda [] (PLUS [Symb "n", Symb "m"])))
+      let (Effect res) = eval Map.empty [] (Pair lam (Pair (Integer 4) Nil))
+      Right (env, ctx, x) <- res
+      env `shouldBe` Map.empty
+      ctx `shouldBe` [Map.insert "n" (Integer 4) Map.empty]
+      let (Effect res') = eval env ctx (Pair x (Pair (Integer 5) Nil))
+      Right (env', ctx', x') <- res'
+      env' `shouldBe` Map.empty
+      ctx' `shouldBe` ([Map.insert "m" (Integer 5) Map.empty] ++ ctx)
+      let (Effect res'') = eval env' ctx' (Pair x' Nil)
+      Right (env'', ctx'', x'') <- res''
+      env'' `shouldBe` Map.empty
+      ctx' `shouldBe` ctx'
+      x'' `shouldBe` (Integer 9)
+
+    -- ((lambda (a) ((lambda (f) ((lambda (a) (f)) #f)) (lambda () a))) #t)
+    it "test for lambda #4" $ do
+      let lam1 = Lambda [] (Symb "a")
+      let lam2 = Lambda [Symb "a"] (Pair (Symb "f") Nil)
+      let lam3 = Lambda [Symb "f"] (Pair lam2 (Pair F Nil))
+      let lam4 = Lambda [Symb "a"] (Pair lam3 (Pair lam1 Nil))
+      let (Effect res) = eval Map.empty [] (Pair lam4 (Pair T Nil))
+      Right (env, ctx, x) <- res
+      x `shouldBe` T
+
+    it "test for label #1" $ do
+      let foo = LABEL (Symb "foo") (Lambda [Symb "x"] (PLUS [Symb "x", Integer 1]))
+      let (Effect res) = eval Map.empty [] foo
+      Right (env, ctx, x') <- res
+      ctx `shouldBe` [Map.insert "foo" (Lambda [Symb "x"] (PLUS [Symb "x", Integer 1])) Map.empty]
+      env `shouldBe` Map.empty
+      let (Effect res') = eval Map.empty [] (Pair foo (Pair (Integer 0) Nil))
+      Right (env', ctx', x'') <- res'
+      x'' `shouldBe` (Integer 1)
+      ctx' `shouldBe` ([Map.insert "x" (Integer 0) Map.empty] ++ ctx)
+      env' `shouldBe` Map.empty
 
 testEvalMath :: IO ()
 testEvalMath = hspec $ do
