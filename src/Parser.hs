@@ -64,6 +64,7 @@ compile (Leaf (BoolType False)) = F
 compile (Leaf (IntegerType x)) = Integer x
 compile (Leaf (DoubleType x)) = Double x
 compile (Leaf (StringType x)) = String x
+compile (Leaf (SymbType ('\'':x))) = QUOTE (Symb x)
 compile (Leaf (SymbType x)) = Symb x
 
 compile (Node (Leaf (SymbType "car")) (Node x Empty)) = CAR (compile x)
@@ -72,6 +73,7 @@ compile (Node (Leaf (SymbType "cons")) (Node x (Node y Empty))) = CONS (compile 
 compile (Node (Leaf (SymbType "atom")) (Node x Empty)) = ATOM (compile x)
 compile (Node (Leaf (SymbType "eq")) (Node x (Node y Empty))) = EQQ (compile x) (compile y)
 compile (Node (Leaf (SymbType "quote")) (Node x Empty)) = QUOTE (compile x)
+compile (Node (Leaf (SymbType "\'")) (Node x Empty)) = QUOTE (compile x)
 compile (Node (Leaf (SymbType "cond")) x) = COND (compileCoupleList x)
 compile (Node (Leaf (SymbType "if")) (Node x (Node y (Node z Empty)))) = IF (compile x) (compile y) (compile z)
 compile (Node (Leaf (SymbType "lambda")) (Node x (Node y Empty))) = Lambda (compileList x) (compile y)
@@ -88,6 +90,7 @@ compile (Node (Leaf (SymbType ">")) x) = GREATER (compileList x)
 compile (Node (Leaf (SymbType "or")) x) = OR (compileList x)
 compile (Node (Leaf (SymbType "and")) x) = AND (compileList x)
 compile (Node (Leaf (SymbType "not")) (Node x Empty)) = NOT (compile x)
+compile (Node (Leaf (SymbType "list")) x) = LIST (compileList x)
 
 compile (Node x y) = Pair (compile x) (compile y)
 

@@ -4,6 +4,7 @@ import Test.Hspec
 import Control.Monad.IO.Class
 
 import Parser
+import SExpr
 
 testReadTokens :: IO ()
 testReadTokens = hspec $ do
@@ -41,6 +42,10 @@ testReadTokens = hspec $ do
       let x = reads ". asd" :: [(Token, String)]
       x `shouldBe` []
 
+    it "test for quote #3" $ do
+      let x = reads "'asd" :: [(Token, String)]
+      x `shouldBe` [(SymbType "'asd", "")]
+
 testReadTokenTrees :: IO ()
 testReadTokenTrees = hspec $ do
   describe "test for reading TokenTrees" $ do
@@ -60,6 +65,15 @@ testReadTokenTrees = hspec $ do
     it "test for Node #1" $ do
       let x = reads "( 45 . 56.0) asd" :: [(TokenTree, String)]
       x `shouldBe` [(Node (Leaf (IntegerType 45)) (Leaf (DoubleType 56.0)), " asd")]
+
+testCompile :: IO ()
+testCompile = hspec $ do
+  describe "test for internal compiling" $ do
+
+    it "test for quote #1" $ do
+      let x = Leaf (SymbType "\'ciao")
+      (compile x) `shouldBe` (QUOTE (Symb "ciao"))
+
 {--
 testReadVal :: IO ()
 testReadVal = hspec $ do

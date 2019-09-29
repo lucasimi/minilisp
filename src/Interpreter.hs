@@ -334,6 +334,13 @@ evalNot env ctx x = do
     F -> return (env, ctx, T)
     _ -> throwError $ UnexpectedValueError x'
 
+evalList' :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)
+evalList' env ctx [] = return (env, ctx, Nil)
+evalList' env ctx (x:xs) = do
+  (_, _, x') <- eval env ctx x
+  (_, _, xs') <- evalList' env ctx xs
+  return (env, ctx, Pair x' xs')
+
 evalPair :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalPair env ctx f x = do
   (env', ctx', f') <- eval env ctx f
@@ -377,6 +384,7 @@ eval env ctx expr = case expr of
   AND x -> evalAnd env ctx x
   OR x -> evalOr env ctx x
   NOT x -> evalNot env ctx x
+  LIST x -> evalList' env ctx x
   Pair f x -> evalPair env ctx f x
 
 -- evaluate all elements in a list

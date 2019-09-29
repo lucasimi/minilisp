@@ -31,6 +31,7 @@ data SExpr = Nil
            | OR [SExpr]
            | AND [SExpr]
            | NOT SExpr
+           | LIST [SExpr]
            deriving Eq
 
 instance Show SExpr where

@@ -166,6 +166,19 @@ testEvalMacros = hspec $ do
       Right (env', [], x') <- result
       x' `shouldBe` (CONS (Integer 4) (Double 6.0))
 
+    it "test for list #1" $ do
+      let x = LIST [Integer 4, Double 6.0]
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` (Pair (Integer 4) (Pair (Double 6.0) Nil))
+
+    it "test for list #2" $ do
+      let x = LIST []
+      let (Effect result) = eval Map.empty [] x
+      Right (env', [], x') <- result
+      x' `shouldBe` Nil
+
+
 testEvalMath :: IO ()
 testEvalMath = hspec $ do
   describe "Test for evaluating math functions" $ do
