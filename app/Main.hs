@@ -27,7 +27,7 @@ readInputFragment str lines = do
         Just expr -> liftIO $ return expr
 
   where
-    open = length $ filter (\x -> x == '(') str
+    open = numberOfOpenBrackets False str
 
 readInput :: InputT IO (SExpr)
 readInput = readInputFragment "" 0

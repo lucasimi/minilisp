@@ -26,6 +26,10 @@ testReadTokens = hspec $ do
       let x = reads "\"a 45 asav\"asd" :: [(Token, String)]
       x `shouldBe` [(StringType "a 45 asav", "asd")]
 
+    it "test for strings #2" $ do
+      let x = reads "\"a 45 asavasd" :: [(Token, String)]
+      x `shouldBe` []
+
     it "test for symbols #1" $ do
       let x = reads "ciao asd" :: [(Token, String)]
       x `shouldBe` [(SymbType "ciao", " asd")]

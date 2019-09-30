@@ -28,6 +28,7 @@ instance Read Token where
           _ -> case split str' of
             ("#t", s) -> [(BoolType True, s)]
             ("#f", s) -> [(BoolType False, s)]
+            ('\"':_, _) -> [] -- a symbol cannot begin with a double quote
             (str'', s) -> [(SymbType str'', s)]
 
 data TokenTree = Empty

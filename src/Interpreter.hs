@@ -165,17 +165,20 @@ evalLabel :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalLabel env ctx (Symb x) y = do
   (_, ctx', y') <- eval env ctx y
   return (env, bindCtx [Symb x] [y'] (Map.empty:ctx'), y')
+evalLabel _ _ x _ = throwError $ UnexpectedValueError x
 
 evalLet :: Env -> Ctx -> SExpr -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalLet env ctx (Symb x) y z = do
   (_, _, y') <- eval env ctx y
   eval env (bindCtx [Symb x] [y'] (Map.empty:ctx)) z
+evalLet _ _ x _ _ = throwError $ UnexpectedValueError x
 
 -- evaluation of "define" special form
 evalDefine :: Env -> Ctx -> SExpr -> SExpr -> Effect (Env, Ctx, SExpr)
 evalDefine env ctx (Symb x) y = do
   (_, _, y') <- eval env ctx y
   return (bindEnv [Symb x] [y'] env, ctx, Symb x)
+evalDefine _ _ x _ = throwError $ UnexpectedValueError x
 
 -- evaluation of "+"
 evalPlus :: Env -> Ctx -> [SExpr] -> Effect (Env, Ctx, SExpr)

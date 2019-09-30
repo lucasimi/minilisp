@@ -186,6 +186,12 @@ testEvalMacros = hspec $ do
       ctx' `shouldBe` [Map.insert "x" (Integer 4) Map.empty]
       env' `shouldBe` Map.empty
 
+    it "test for let #2" $ do
+      let x = LET (Integer 5) (Integer 4) (Integer 5)
+      let (Effect def) = eval Map.empty [] x
+      Left err <- def
+      return ()
+
     it "test for define #1" $ do
       let x = DEFINE (Symb "x") (Integer 4)
       let y = Symb "x"
@@ -196,6 +202,12 @@ testEvalMacros = hspec $ do
       x' `shouldBe` (Symb "x")
       y' `shouldBe` (Integer 4)
       env' `shouldBe` (Map.insert "x" (Integer 4) Map.empty)
+
+    it "test for define #2" $ do
+      let x = DEFINE (Integer 5) (Integer 4)
+      let (Effect def) = eval Map.empty [] x
+      Left err <- def
+      return ()
 
     -- (lambda (x) (+ x 1))
     it "test for lambda #1" $ do
@@ -256,6 +268,12 @@ testEvalMacros = hspec $ do
       x'' `shouldBe` (Integer 1)
       ctx' `shouldBe` ([Map.insert "x" (Integer 0) Map.empty] ++ ctx)
       env' `shouldBe` Map.empty
+
+    it "test for label #2" $ do
+      let x = LABEL (Integer 5) (Integer 4)
+      let (Effect def) = eval Map.empty [] x
+      Left err <- def
+      return ()
 
 testEvalMath :: IO ()
 testEvalMath = hspec $ do
