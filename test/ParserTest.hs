@@ -76,7 +76,42 @@ testCompile = hspec $ do
 
     it "test for quote #1" $ do
       let x = Leaf (SymbType "\'ciao")
-      (compile x) `shouldBe` (QUOTE (Symb "ciao"))
+      case compile x of
+        Just x' -> do
+          x' `shouldBe` (QUOTE (Symb "ciao"))
+        _ -> 1 `shouldBe` 2
+
+    it "test for label #1" $ do
+      let a = Leaf $ IntegerType 4
+      let x = (Node (Leaf (SymbType "label")) (Node a (Node a Empty)))
+      case compile x of
+        Just _ -> do
+          1 `shouldBe` 2
+        _ -> 1 `shouldBe` 1
+
+    it "test for let #1" $ do
+      let a = Leaf $ IntegerType 4
+      let x = (Node (Leaf (SymbType "let")) (Node a (Node a (Node a Empty))))
+      case compile x of
+        Just _ -> do
+          1 `shouldBe` 2
+        _ -> 1 `shouldBe` 1
+
+    it "test for define #1" $ do
+      let a = Leaf $ IntegerType 4
+      let x = (Node (Leaf (SymbType "define")) (Node a (Node a Empty)))
+      case compile x of
+        Just _ -> do
+          1 `shouldBe` 2
+        _ -> 1 `shouldBe` 1
+
+    it "test for lambda #1" $ do
+      let a = Leaf $ IntegerType 4
+      let x = (Node (Leaf (SymbType "lambda")) (Node a (Node a Empty)))
+      case compile x of
+        Just _ -> do
+          1 `shouldBe` 2
+        _ -> 1 `shouldBe` 1
 
 {--
 

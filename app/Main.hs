@@ -25,7 +25,6 @@ readInputFragment str lines = do
       False -> case parse (str ++ " " ++ str') of
         Nothing -> readInputFragment (str ++ " " ++ str') (lines + 1)
         Just expr -> liftIO $ return expr
-
   where
     open = numberOfOpenBrackets False str
 
