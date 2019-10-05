@@ -46,7 +46,7 @@ testReadTokens = hspec $ do
       let x = reads ". asd" :: [(Token, String)]
       x `shouldBe` []
 
-    it "test for quote #3" $ do
+    it "test for quote #1" $ do
       let x = reads "'asd" :: [(Token, String)]
       x `shouldBe` [(SymbType "'asd", "")]
 
@@ -69,6 +69,18 @@ testReadTokenTrees = hspec $ do
     it "test for Node #1" $ do
       let x = reads "( 45 . 56.0) asd" :: [(TokenTree, String)]
       x `shouldBe` [(Node (Leaf (IntegerType 45)) (Leaf (DoubleType 56.0)), " asd")]
+
+    it "test for quote #1" $ do
+      let x = reads "'() rest" :: [(TokenTree, String)]
+      x `shouldBe` [(Node (Leaf (SymbType "\'")) (Node Empty Empty), " rest")]
+
+    it "test for quote #2" $ do
+      let x = reads "'(cons a b) rest" :: [(TokenTree, String)]
+      x `shouldBe` [(Node (Leaf (SymbType "\'")) (Node (Node (Leaf (SymbType "cons")) (Node (Leaf (SymbType "a")) (Node (Leaf (SymbType "b")) Empty))) Empty), " rest")]
+
+    it "test for quote #3" $ do
+      let x = reads "'ciao rest" :: [(TokenTree, String)]
+      x `shouldBe` [(Node (Leaf (SymbType "\'")) (Node (Leaf (SymbType "ciao")) Empty), " rest")]
 
 testCompile :: IO ()
 testCompile = hspec $ do

@@ -40,6 +40,9 @@ instance Read TokenTree where
     "" -> []
     ')':_ -> []
     '.':_ -> []
+    '\'':str' -> case reads str' :: [(TokenTree, String)] of
+      [(x, str'')] -> [(Node (Leaf (SymbType "\'")) (Node x Empty), str'')]
+      _ -> [(Empty, '\'':str')]
     '(':str' -> case dropLeadingBlanks str' of
       ')':str'' -> [(Empty, str'')]
       _ -> case reads str' :: [(TokenTree, String)] of
@@ -211,9 +214,11 @@ compileCoupleList (Node (Node x (Node y Empty)) z) = do
   return ((x', y'):z')
 compileCoupleList _ = Nothing
 
+{--
 parse :: String -> Maybe SExpr
 parse str = case reads str :: [(TokenTree, String)] of
   [(tree, str')] -> case isBlank str' of
     True -> compile tree
     False -> Nothing
   _ -> Nothing
+--}
