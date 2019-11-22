@@ -5,13 +5,16 @@ import qualified Data.Map as Map
 import SExpr
 import Utils
 
--- all admitted types for primitive type
 data Token = IntegerType Integer
            | DoubleType Double
            | BoolType Bool
            | StringType String
            | SymbType String
            deriving (Show, Eq)
+
+data TokenTree = Empty
+              | Leaf Token
+              | Node TokenTree TokenTree deriving (Show, Eq)
 
 instance Read Token where
   readsPrec _ str = case dropLeadingBlanks str of
@@ -30,10 +33,6 @@ instance Read Token where
             ("#f", s) -> [(BoolType False, s)]
             ('\"':_, _) -> [] -- a symbol cannot begin with a double quote
             (str'', s) -> [(SymbType str'', s)]
-
-data TokenTree = Empty
-               | Leaf Token
-               | Node TokenTree TokenTree deriving (Show, Eq)
 
 instance Read TokenTree where
   readsPrec _ str = case dropLeadingBlanks str of
@@ -213,12 +212,3 @@ compileCoupleList (Node (Node x (Node y Empty)) z) = do
   z' <- compileCoupleList z
   return ((x', y'):z')
 compileCoupleList _ = Nothing
-
-{--
-parse :: String -> Maybe SExpr
-parse str = case reads str :: [(TokenTree, String)] of
-  [(tree, str')] -> case isBlank str' of
-    True -> compile tree
-    False -> Nothing
-  _ -> Nothing
---}

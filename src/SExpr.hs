@@ -1,6 +1,5 @@
 module SExpr where
 
--- S-Expression data type
 data SExpr = Nil
            | T
            | F
@@ -34,6 +33,10 @@ data SExpr = Nil
            | LIST [SExpr]
            deriving Eq
 
+showSExprList :: [SExpr] -> String
+showSExprList [] = ""
+showSExprList (x:xs) = show x ++ " " ++ showSExprList xs
+
 instance Show SExpr where
   show Nil = "()"
   show T = "#t"
@@ -50,4 +53,28 @@ instance Show SExpr where
           isList (Pair x y) = isList y
           isList _ = False
   show (Lambda _ _) = "<function>"
+
+  show (CAR x) = "(car " ++ show x ++ ")"
+  show (CDR x) = "(cdr " ++ show x ++ ")"
+  show (CONS x y) = "(cons " ++ show x ++ " " ++ show y ++ ")"
+  show (ATOM x) = "(atom " ++ show x ++ ")"
+  show (EQQ x y) = "(eq " ++ show x ++ " " ++ show y ++ ")"
+  show (QUOTE x) = "\'" ++ show x
+  show (PLUS x) = "(+ " ++ showSExprList x ++ ")"
+  show (MINUS x) = "(- " ++ showSExprList x ++ ")"
+  show (MULT x) = "(* " ++ showSExprList x ++ ")"
+  show (DIV x) = "(/ " ++ showSExprList x ++ ")"
+  show (LESS x) = "(< " ++ showSExprList x ++ ")"
+  show (GREATER x) = "(> " ++ showSExprList x ++ ")"
+  show (OR x) = "(or " ++ showSExprList x ++ ")"
+  show (AND x) = "(and " ++ showSExprList x ++ ")"
+  show (LIST x) = "(list " ++ showSExprList x ++ ")"
+
+  show (IF x y z) = "(if " ++ show x ++ " " ++ show y ++ " " ++ show z ++ ")"
+  show (LABEL x y) = "(label " ++ show x ++ " " ++ show y ++ ")"
+  show (LET x y z) = "(let " ++ show x ++ " " ++ show y ++ " " ++ show z ++ ")"
+  show (DEFINE x y) = "(define " ++ show x ++ " " ++ show y ++ ")"
+
+  show (MOD x y) = "(% " ++ show x ++ " " ++ show y ++ ")"
+  show (NOT x) = "(not " ++ show x ++ ")"
   show _ = "<unevaluated>"
