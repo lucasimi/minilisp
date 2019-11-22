@@ -37,6 +37,10 @@ showSExprList :: [SExpr] -> String
 showSExprList [] = ""
 showSExprList (x:xs) = show x ++ " " ++ showSExprList xs
 
+showSExprPairList :: [(SExpr, SExpr)] -> String
+showSExprPairList [] = ""
+showSExprPairList ((a,b):xs) = "(" ++ show a ++ " " ++ show b ++ ") " ++ showSExprPairList xs
+
 instance Show SExpr where
   show Nil = "()"
   show T = "#t"
@@ -69,12 +73,11 @@ instance Show SExpr where
   show (OR x) = "(or " ++ showSExprList x ++ ")"
   show (AND x) = "(and " ++ showSExprList x ++ ")"
   show (LIST x) = "(list " ++ showSExprList x ++ ")"
-
+  show (COND x) = "(cond " ++ showSExprPairList ++ ")"
   show (IF x y z) = "(if " ++ show x ++ " " ++ show y ++ " " ++ show z ++ ")"
   show (LABEL x y) = "(label " ++ show x ++ " " ++ show y ++ ")"
   show (LET x y z) = "(let " ++ show x ++ " " ++ show y ++ " " ++ show z ++ ")"
   show (DEFINE x y) = "(define " ++ show x ++ " " ++ show y ++ ")"
-
   show (MOD x y) = "(% " ++ show x ++ " " ++ show y ++ ")"
   show (NOT x) = "(not " ++ show x ++ ")"
   show _ = "<unevaluated>"
