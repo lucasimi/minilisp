@@ -1,4 +1,4 @@
-module InterpreterTest where
+module EvalTest where
 
 import qualified Data.Map as Map
 import Test.Hspec
@@ -6,9 +6,10 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Control.Monad.IO.Class
 
+import Data.SExpr
+import Runtime.Effect
+import Interpreter.Eval
 import Utils
-import SExpr
-import Interpreter
 
 testEvalAtoms :: IO ()
 testEvalAtoms = hspec $ do

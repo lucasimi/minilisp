@@ -1,65 +1,13 @@
-module Parser where
+module Data.Compiler where
 
 import qualified Data.Map as Map
 
-import SExpr
+import Data.SExpr
+import Data.Token
+import Data.ParseTree
 import Utils
 
-data Token = IntegerType Integer
-           | DoubleType Double
-           | BoolType Bool
-           | StringType String
-           | SymbType String
-           deriving (Show, Eq)
-
-data TokenTree = Empty
-              | Leaf Token
-              | Node TokenTree TokenTree deriving (Show, Eq)
-
-instance Read Token where
-  readsPrec _ str = case dropLeadingBlanks str of
-    "" -> []
-    '(':_ -> []
-    ')':_ -> []
-    '.':_ -> []
-    str' -> case reads str' :: [(String, String)] of
-      [(x, s)] -> [(StringType x, s)]
-      _ -> case reads str' :: [(Integer, String)] of
-        [(x, s)] -> [(IntegerType x, s)]
-        _ -> case reads str' :: [(Double, String)] of
-          [(x, s)] -> [(DoubleType x, s)]
-          _ -> case split str' of
-            ("#t", s) -> [(BoolType True, s)]
-            ("#f", s) -> [(BoolType False, s)]
-            ('\"':_, _) -> [] -- a symbol cannot begin with a double quote
-            (str'', s) -> [(SymbType str'', s)]
-
-instance Read TokenTree where
-  readsPrec _ str = case dropLeadingBlanks str of
-    "" -> []
-    ')':_ -> []
-    '.':_ -> []
-    '\'':str' -> case reads str' :: [(TokenTree, String)] of
-      [(x, str'')] -> [(Node (Leaf (SymbType "\'")) (Node x Empty), str'')]
-      _ -> [(Empty, '\'':str')]
-    '(':str' -> case dropLeadingBlanks str' of
-      ')':str'' -> [(Empty, str'')]
-      _ -> case reads str' :: [(TokenTree, String)] of
-        [(x, str'')] -> case dropLeadingBlanks str'' of
-          "" -> []
-          ')':str''' -> [(Node x Empty, str''')]
-          '.':str''' -> case reads ('(':str''') :: [(TokenTree, String)] of
-            [(Node y Empty, str'''')] -> [(Node x y, str'''')]
-            _ -> []
-          _ -> case reads ('(':str'') :: [(TokenTree, String)] of
-            [(y, str''')] -> [(Node x y, str''')]
-            _ -> []
-        _ -> []
-    _ -> case reads str :: [(Token, String)] of
-      [(x, str')] -> [(Leaf x, str')]
-      _ -> []
-
-compile :: TokenTree -> Maybe SExpr
+compile :: ParseTree -> Maybe SExpr
 compile Empty = Just Nil
 
 compile (Leaf (BoolType True)) = Just T
@@ -196,7 +144,7 @@ compile (Node x y) = do
   y' <- compile y
   return $ Pair x' y'
 
-compileList :: TokenTree -> Maybe [SExpr]
+compileList :: ParseTree -> Maybe [SExpr]
 compileList Empty = Just []
 compileList (Node x y) = do
   x' <- compile x
@@ -204,7 +152,7 @@ compileList (Node x y) = do
   return (x':y')
 compileList _ = Nothing
 
-compileCoupleList :: TokenTree -> Maybe [(SExpr, SExpr)]
+compileCoupleList :: ParseTree -> Maybe [(SExpr, SExpr)]
 compileCoupleList Empty = Just []
 compileCoupleList (Node (Node x (Node y Empty)) z) = do
   x' <- compile x

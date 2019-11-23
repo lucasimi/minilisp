@@ -1,4 +1,4 @@
-module SExpr where
+module Data.SExpr where
 
 data SExpr = Nil
            | T
@@ -57,7 +57,6 @@ instance Show SExpr where
           isList (Pair x y) = isList y
           isList _ = False
   show (Lambda _ _) = "<function>"
-
   show (CAR x) = "(car " ++ show x ++ ")"
   show (CDR x) = "(cdr " ++ show x ++ ")"
   show (CONS x y) = "(cons " ++ show x ++ " " ++ show y ++ ")"
@@ -73,11 +72,10 @@ instance Show SExpr where
   show (OR x) = "(or " ++ showSExprList x ++ ")"
   show (AND x) = "(and " ++ showSExprList x ++ ")"
   show (LIST x) = "(list " ++ showSExprList x ++ ")"
-  show (COND x) = "(cond " ++ showSExprPairList ++ ")"
+  show (COND x) = "(cond " ++ showSExprPairList x ++ ")"
   show (IF x y z) = "(if " ++ show x ++ " " ++ show y ++ " " ++ show z ++ ")"
   show (LABEL x y) = "(label " ++ show x ++ " " ++ show y ++ ")"
   show (LET x y z) = "(let " ++ show x ++ " " ++ show y ++ " " ++ show z ++ ")"
   show (DEFINE x y) = "(define " ++ show x ++ " " ++ show y ++ ")"
   show (MOD x y) = "(% " ++ show x ++ " " ++ show y ++ ")"
   show (NOT x) = "(not " ++ show x ++ ")"
-  show _ = "<unevaluated>"

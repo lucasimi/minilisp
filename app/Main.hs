@@ -5,13 +5,15 @@ import System.Environment
 import System.Console.Haskeline
 import Control.Monad.IO.Class
 
-import Interpreter
-import Parser
-import SExpr
+import Data.ParseTree
+import Data.Compiler
+import Data.SExpr
+import Interpreter.Eval
+import Runtime.Effect
 import Utils
 
 -- Read input from keyboard
-readInputFragment :: String -> Int -> InputT IO (Maybe TokenTree)
+readInputFragment :: String -> Int -> InputT IO (Maybe ParseTree)
 readInputFragment str lines = do
   input <- getInputLine $ "[" ++ show lines ++ "]> "
            ++ (concat $ replicate open "\t")
@@ -22,7 +24,7 @@ readInputFragment str lines = do
     Just str' -> case isBlank str' of
       True -> readInputFragment str lines
       False -> case numberOfOpenBrackets False (str ++ " " ++ str') >= 0 of
-        True -> case reads (str ++ " " ++ str') :: [(TokenTree, String)] of
+        True -> case reads (str ++ " " ++ str') :: [(ParseTree, String)] of
           [] -> readInputFragment (str ++ " " ++ str') (lines + 1)
           [(tree, str'')] -> case isBlank str'' of
             True -> liftIO $ return $ Just tree
@@ -31,7 +33,7 @@ readInputFragment str lines = do
   where
     open = numberOfOpenBrackets False str
 
-readInput :: InputT IO (Maybe TokenTree)
+readInput :: InputT IO (Maybe ParseTree)
 readInput = readInputFragment "" 0
 
 -- read-eval-print-loop for terminal

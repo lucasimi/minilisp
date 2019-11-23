@@ -1,10 +1,10 @@
-import ParserTest
-import InterpreterTest
+import CompilerTest
+import EvalTest
 
 main :: IO ()
 main = do
   testReadTokens
-  testReadTokenTrees
+  testReadParseTrees
   testCompile
   testEvalAtoms
   testEvalBuiltIn

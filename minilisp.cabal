@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8041b3b29d2e32ff95bde03f5a127e8844379ed7b96a3f64a33619a1d62394cf
+-- hash: a94600b5544fc2d8153c9072d05a8d5b75f1eec3ecbf19ac8191a561d1585b64
 
 name:           minilisp
 version:        0.1.0.0
@@ -26,9 +26,13 @@ source-repository head
 
 library
   exposed-modules:
-      Interpreter
-      Parser
-      SExpr
+      Data.Compiler
+      Data.ParseTree
+      Data.SExpr
+      Data.Token
+      Interpreter.Eval
+      Runtime.Effect
+      Runtime.Error
       Utils
   other-modules:
       Paths_minilisp
@@ -62,8 +66,8 @@ test-suite minilisp-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      InterpreterTest
-      ParserTest
+      CompilerTest
+      EvalTest
       Paths_minilisp
   hs-source-dirs:
       test

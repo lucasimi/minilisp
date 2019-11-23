@@ -1,10 +1,12 @@
-module ParserTest where
+module CompilerTest where
 
 import Test.Hspec
 import Control.Monad.IO.Class
 
-import Parser
-import SExpr
+import Data.Token
+import Data.ParseTree
+import Data.SExpr
+import Data.Compiler
 
 testReadTokens :: IO ()
 testReadTokens = hspec $ do
@@ -50,36 +52,36 @@ testReadTokens = hspec $ do
       let x = reads "'asd" :: [(Token, String)]
       x `shouldBe` [(SymbType "'asd", "")]
 
-testReadTokenTrees :: IO ()
-testReadTokenTrees = hspec $ do
-  describe "test for reading TokenTrees" $ do
+testReadParseTrees :: IO ()
+testReadParseTrees = hspec $ do
+  describe "test for reading ParseTrees" $ do
 
     it "test for blanks" $ do
-      let x = reads " \r\t\n" :: [(TokenTree, String)]
+      let x = reads " \r\t\n" :: [(ParseTree, String)]
       x `shouldBe` []
 
     it "test for Empty #1" $ do
-      let x = reads " ()asd" :: [(TokenTree, String)]
+      let x = reads " ()asd" :: [(ParseTree, String)]
       x `shouldBe` [(Empty, "asd")]
 
     it "test for Leaf #1" $ do
-      let x = reads " 45asd" :: [(TokenTree, String)]
+      let x = reads " 45asd" :: [(ParseTree, String)]
       x `shouldBe` [(Leaf (IntegerType 45), "asd")]
 
     it "test for Node #1" $ do
-      let x = reads "( 45 . 56.0) asd" :: [(TokenTree, String)]
+      let x = reads "( 45 . 56.0) asd" :: [(ParseTree, String)]
       x `shouldBe` [(Node (Leaf (IntegerType 45)) (Leaf (DoubleType 56.0)), " asd")]
 
     it "test for quote #1" $ do
-      let x = reads "'() rest" :: [(TokenTree, String)]
+      let x = reads "'() rest" :: [(ParseTree, String)]
       x `shouldBe` [(Node (Leaf (SymbType "\'")) (Node Empty Empty), " rest")]
 
     it "test for quote #2" $ do
-      let x = reads "'(cons a b) rest" :: [(TokenTree, String)]
+      let x = reads "'(cons a b) rest" :: [(ParseTree, String)]
       x `shouldBe` [(Node (Leaf (SymbType "\'")) (Node (Node (Leaf (SymbType "cons")) (Node (Leaf (SymbType "a")) (Node (Leaf (SymbType "b")) Empty))) Empty), " rest")]
 
     it "test for quote #3" $ do
-      let x = reads "'ciao rest" :: [(TokenTree, String)]
+      let x = reads "'ciao rest" :: [(ParseTree, String)]
       x `shouldBe` [(Node (Leaf (SymbType "\'")) (Node (Leaf (SymbType "ciao")) Empty), " rest")]
 
 testCompile :: IO ()
